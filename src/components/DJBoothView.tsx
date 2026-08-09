@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   CheckCircle2,
   XCircle,
@@ -17,7 +17,9 @@ import {
   Radio,
   ExternalLink,
   Smartphone,
-  Sliders
+  Sliders,
+  Sparkles,
+  RefreshCw
 } from 'lucide-react';
 import { SongRequest, RequestStatus, VirtualDJConfig, OwnerConfig } from '../types';
 import { soundFx } from '../services/soundEffects';
@@ -37,6 +39,7 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
   onUpdateRequestStatus,
   onToggleAutoAccept,
 }) => {
+  // Default to showing 'all' or 'pending' requests
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [rejectionModalReqId, setRejectionModalReqId] = useState<string | null>(null);
 
@@ -44,7 +47,6 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
   const [soundSystemMode, setSoundSystemMode] = useState<'virtualdj' | 'web_player' | 'spotify'>('web_player');
   const [isPlayingWebAudio, setIsPlayingWebAudio] = useState<boolean>(false);
   const [currentPlayingReq, setCurrentPlayingReq] = useState<SongRequest | null>(null);
-  const [audioProgress, setAudioProgress] = useState<number>(0);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -63,7 +65,6 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
     return true;
   });
 
-  // Handle Web Audio Playback (No VirtualDJ mode)
   const handlePlaySongStandalone = (req: SongRequest) => {
     setCurrentPlayingReq(req);
     onUpdateRequestStatus(req.id, 'playing');
@@ -78,16 +79,10 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
       audio.play();
       setIsPlayingWebAudio(true);
 
-      audio.ontimeupdate = () => {
-        if (audio.duration) {
-          setAudioProgress((audio.currentTime / audio.duration) * 100);
-        }
-      };
-
       audio.onended = () => {
         setIsPlayingWebAudio(false);
         onUpdateRequestStatus(req.id, 'completed');
-        // Play next pending/accepted song automatically!
+        // Play next request automatically
         const next = requests.find((r) => (r.status === 'accepted' || r.status === 'pending') && r.id !== req.id);
         if (next) {
           handlePlaySongStandalone(next);
@@ -110,9 +105,9 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
     }
   };
 
-  const handleAccept = (req: SongRequest) => {
+  const handleApproveRequest = (req: SongRequest) => {
     soundFx.playScratch();
-    onUpdateRequestStatus(req.id, 'sent_to_vdj');
+    onUpdateRequestStatus(req.id, 'accepted');
   };
 
   const handleConfirmReject = (reason: string) => {
@@ -129,7 +124,7 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
       
-      {/* Sound Output Mode Switcher Banner (VirtualDJ vs Standalone Web Player vs Spotify) */}
+      {/* Sound Output Mode Switcher Banner */}
       <div className="glass-panel-neon p-5 rounded-3xl border border-cyan-500/40 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -184,7 +179,7 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
           </div>
         </div>
 
-        {/* Live Audio Deck for Standalone Web Player Mode (Phone / Tablet / AUX) */}
+        {/* Live Audio Deck */}
         {soundSystemMode === 'web_player' && (
           <div className="p-4 rounded-2xl bg-black/60 border border-purple-500/30 flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
@@ -270,25 +265,18 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
           </div>
         </div>
 
-        {/* Auto Accept Switch */}
+        {/* Total Songs in Queue */}
         <div className="glass-panel rounded-2xl p-5 border border-white/10 flex items-center justify-between">
           <div>
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Auto-Aceptar Ofertas</span>
-            <div className="text-xs font-bold text-slate-200 mt-1">
-              Si pago {'>='} ${vdjConfig.autoAcceptThresholdCOP.toLocaleString('es-CO')} COP
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total en Registro</span>
+            <div className="text-3xl font-extrabold text-white mt-1">
+              {requests.length} <span className="text-xs text-slate-400 font-normal">canciones</span>
             </div>
-            <p className="text-[10px] text-purple-300 mt-1">Auto-reproducir en altavoces</p>
+            <p className="text-[10px] text-purple-300 mt-1">Sincronizado en Vivo</p>
           </div>
-          <button
-            onClick={onToggleAutoAccept}
-            className={`w-12 h-7 rounded-full p-1 transition-colors ${
-              vdjConfig.autoSyncToAutomix ? 'bg-purple-600' : 'bg-slate-700'
-            }`}
-          >
-            <div className={`w-5 h-5 rounded-full bg-white transition-transform ${
-              vdjConfig.autoSyncToAutomix ? 'translate-x-5' : 'translate-x-0'
-            }`}></div>
-          </button>
+          <div className="w-12 h-12 rounded-2xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400">
+            <Music className="w-6 h-6" />
+          </div>
         </div>
 
       </div>
@@ -323,14 +311,14 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
             <Disc3 className="w-7 h-7 text-pink-400 animate-spin-slow" />
             <div>
               <h3 className="text-xl font-extrabold text-white">Cola de Pedidos Nequi / Bancolombia</h3>
-              <p className="text-xs text-slate-400">Aprueba, pon a sonar en los altavoces o abre en Spotify</p>
+              <p className="text-xs text-slate-400">Verifica el pago Nequi/Bancolombia y aprueba para proyectar en la Pantalla del Club</p>
             </div>
           </div>
 
           <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/10 overflow-x-auto">
             {[
-              { id: 'all', label: 'Todos' },
-              { id: 'pending', label: 'Pendientes' },
+              { id: 'all', label: `Todos (${requests.length})` },
+              { id: 'pending', label: `Pendientes (${pendingRequests.length})` },
               { id: 'active', label: 'En Cola' },
               { id: 'playing', label: 'Sonando' },
               { id: 'rejected', label: 'Rechazados' },
@@ -339,7 +327,7 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
                 key={tab.id}
                 onClick={() => setFilterStatus(tab.id)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  filterStatus === tab.id ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'
+                  filterStatus === tab.id ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
                 }`}
               >
                 {tab.label}
@@ -349,88 +337,109 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
         </div>
 
         {/* Requests List */}
-        <div className="space-y-4">
-          {filteredRequests.map((req) => (
-            <div
-              key={req.id}
-              className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${
-                req.status === 'playing'
-                  ? 'bg-pink-950/30 border-pink-500/60 shadow-lg shadow-pink-500/20'
-                  : 'bg-[#12121e] border-white/10'
-              }`}
-            >
-              <div className="flex items-center gap-4 min-w-0">
-                <img src={req.song.albumCover} alt={req.song.title} className="w-16 h-16 rounded-xl object-cover" />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-500/20 text-purple-300">
-                      {req.priority.badge}
-                    </span>
-                    <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
-                      +${req.totalPaidCOP.toLocaleString('es-CO')} COP ({req.paymentMethod.toUpperCase()})
-                    </span>
+        {filteredRequests.length === 0 ? (
+          <div className="p-12 text-center text-slate-400 glass-panel rounded-3xl space-y-3 border border-white/10">
+            <Music className="w-12 h-12 mx-auto text-purple-400 opacity-40 animate-bounce" />
+            <h4 className="text-base font-bold text-white">No hay canciones en la lista "{filterStatus}"</h4>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              Pide una canción desde el celular del cliente o escanea el QR para verificar el flujo de trabajo en tiempo real.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredRequests.map((req) => (
+              <div
+                key={req.id}
+                className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${
+                  req.status === 'playing'
+                    ? 'bg-pink-950/30 border-pink-500/60 shadow-lg shadow-pink-500/20'
+                    : req.status === 'pending'
+                    ? 'bg-purple-950/40 border-purple-500/50 shadow-md ring-1 ring-purple-500/30'
+                    : 'bg-[#12121e] border-white/10'
+                }`}
+              >
+                <div className="flex items-center gap-4 min-w-0">
+                  <img src={req.song.albumCover} alt={req.song.title} className="w-16 h-16 rounded-xl object-cover shadow-md flex-shrink-0" />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                        {req.priority.badge}
+                      </span>
+                      <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                        +${req.totalPaidCOP.toLocaleString('es-CO')} COP ({req.paymentMethod.toUpperCase()})
+                      </span>
+                    </div>
+
+                    <h4 className="font-bold text-white text-base truncate mt-1">{req.song.title}</h4>
+                    <p className="text-xs text-slate-400 truncate">{req.song.artist} • Pedido por {req.userName} ({req.tableNumber})</p>
+
+                    {req.dedicatedMessage && (
+                      <p className="mt-1 text-xs text-pink-300 bg-pink-500/10 px-2.5 py-1 rounded-lg border border-pink-500/20 italic">
+                        💬 "{req.dedicatedMessage}"
+                      </p>
+                    )}
                   </div>
+                </div>
 
-                  <h4 className="font-bold text-white text-base truncate mt-1">{req.song.title}</h4>
-                  <p className="text-xs text-slate-400 truncate">{req.song.artist} • Pedido por {req.userName} ({req.tableNumber})</p>
+                <div className="flex items-center gap-2 w-full md:w-auto justify-end flex-wrap">
+                  
+                  {/* Spotify quick link */}
+                  <button
+                    onClick={() => openInSpotifySearch(req.song.title, req.song.artist)}
+                    className="px-3 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white font-bold text-xs flex items-center gap-1 border border-emerald-500/30"
+                    title="Abrir en Spotify"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Spotify</span>
+                  </button>
 
-                  {req.dedicatedMessage && (
-                    <p className="mt-1 text-xs text-pink-300 bg-pink-500/10 px-2.5 py-1 rounded-lg border border-pink-500/20 italic">
-                      💬 "{req.dedicatedMessage}"
-                    </p>
+                  {req.status === 'pending' && (
+                    <>
+                      <button
+                        onClick={() => handleApproveRequest(req)}
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-600/30"
+                      >
+                        <CheckCircle2 className="w-4 h-4 text-white" />
+                        <span>Aprobar Pago</span>
+                      </button>
+
+                      <button
+                        onClick={() => handlePlaySongStandalone(req)}
+                        className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-purple-600/30"
+                      >
+                        <Play className="w-4 h-4 fill-white" />
+                        <span>Sonar Ahora</span>
+                      </button>
+
+                      <button
+                        onClick={() => setRejectionModalReqId(req.id)}
+                        className="px-3 py-2 rounded-xl bg-rose-600/20 text-rose-300 font-bold text-xs border border-rose-500/30"
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
+
+                  {(req.status === 'accepted' || req.status === 'sent_to_vdj') && (
+                    <button
+                      onClick={() => handlePlaySongStandalone(req)}
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xs flex items-center gap-1.5"
+                    >
+                      <Play className="w-4 h-4 fill-white" />
+                      <span>Sonar Ahora</span>
+                    </button>
+                  )}
+
+                  {req.status === 'playing' && (
+                    <span className="px-3 py-1.5 rounded-xl bg-pink-500 text-white font-extrabold text-xs animate-pulse">
+                      SONANDO AHORA EN PANTALLA
+                    </span>
                   )}
                 </div>
               </div>
-
-              <div className="flex items-center gap-2 w-full md:w-auto justify-end">
-                
-                {/* Spotify quick link */}
-                <button
-                  onClick={() => openInSpotifySearch(req.song.title, req.song.artist)}
-                  className="px-3 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white font-bold text-xs flex items-center gap-1 border border-emerald-500/30"
-                  title="Abrir en Spotify"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Spotify</span>
-                </button>
-
-                {req.status === 'pending' && (
-                  <>
-                    <button
-                      onClick={() => handlePlaySongStandalone(req)}
-                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-purple-600/30"
-                    >
-                      <Play className="w-4 h-4 fill-white" />
-                      <span>Sonar en Altavoces</span>
-                    </button>
-                    <button
-                      onClick={() => setRejectionModalReqId(req.id)}
-                      className="px-3 py-2 rounded-xl bg-rose-600/20 text-rose-300 font-bold text-xs border border-rose-500/30"
-                    >
-                      <XCircle className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
-
-                {(req.status === 'accepted' || req.status === 'sent_to_vdj') && (
-                  <button
-                    onClick={() => handlePlaySongStandalone(req)}
-                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xs flex items-center gap-1.5"
-                  >
-                    <Play className="w-4 h-4 fill-white" />
-                    <span>Sonar Ahora</span>
-                  </button>
-                )}
-
-                {req.status === 'playing' && (
-                  <span className="px-3 py-1.5 rounded-xl bg-pink-500 text-white font-extrabold text-xs animate-pulse">
-                    SONANDO AHORA
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
       </div>
 
