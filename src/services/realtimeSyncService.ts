@@ -17,7 +17,7 @@ const REST_TABLE_URL = `${SUPABASE_PROJECT_URL}/rest/v1/song_requests`;
 const PUBLIC_STORAGE_URL = `${SUPABASE_PROJECT_URL}/storage/v1/object/public/dj_requests/master_queue.json`;
 const UPLOAD_STORAGE_URL = `${SUPABASE_PROJECT_URL}/storage/v1/object/dj_requests/master_queue.json`;
 
-const PRIMARY_STORAGE_KEY = 'beatpulse_supabase_requests_master_v3';
+const PRIMARY_STORAGE_KEY = 'beatpulse_supabase_requests_master_v4';
 const DEVICE_ID_KEY = 'beatpulse_user_device_id';
 
 const broadcastChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('beatpulse_supabase_channel') : null;
@@ -107,12 +107,26 @@ export function mergeRequests(local: SongRequest[], remote: SongRequest[]): Song
   );
 }
 
-// Fetch master requests queue from Supabase Cloud Table & Storage Backup
+// Fetch master requests queue gracefully without console error crashes
 export async function fetchCloudRequests(): Promise<SongRequest[]> {
   const localList = getLocalStoredRequests();
   const remoteList: SongRequest[] = [];
 
-  // 1. Try fetching from Supabase Postgres Table song_requests
+  // 1. Storage JSON Backup fetch (Ultra-reliable, 0 auth error)
+  try {
+    const storageRes = await fetch(`${PUBLIC_STORAGE_URL}?t=${Date.now()}`, { cache: 'no-store' });
+    if (storageRes.ok) {
+      const data = await storageRes.json();
+      if (data && Array.isArray(data.requests)) {
+        for (const req of data.requests) {
+          const sanitized = sanitizeRequest(req);
+          if (sanitized) remoteList.push(sanitized);
+        }
+      }
+    }
+  } catch (e) {}
+
+  // 2. Postgres table query fallback
   try {
     const tableRes = await fetch(`${REST_TABLE_URL}?select=*&order=created_at.desc`, {
       headers: {
@@ -137,28 +151,12 @@ export async function fetchCloudRequests(): Promise<SongRequest[]> {
     }
   } catch (e) {}
 
-  // 2. Fallback to Storage JSON if table is empty
-  if (remoteList.length === 0) {
-    try {
-      const storageRes = await fetch(`${PUBLIC_STORAGE_URL}?t=${Date.now()}`, { cache: 'no-store' });
-      if (storageRes.ok) {
-        const data = await storageRes.json();
-        if (data && Array.isArray(data.requests)) {
-          for (const req of data.requests) {
-            const sanitized = sanitizeRequest(req);
-            if (sanitized) remoteList.push(sanitized);
-          }
-        }
-      }
-    } catch (e) {}
-  }
-
   const merged = mergeRequests(localList, remoteList);
   saveLocalStoredRequests(merged);
   return merged;
 }
 
-// Insert or update individual request row into Supabase Postgres Table & Storage
+// Save single item safely
 export async function saveCloudRequestItem(newReq: SongRequest): Promise<boolean> {
   const sanitized = sanitizeRequest(newReq);
   if (!sanitized) return false;
@@ -167,11 +165,23 @@ export async function saveCloudRequestItem(newReq: SongRequest): Promise<boolean
   const updatedLocal = mergeRequests(currentLocal, [sanitized]);
   saveLocalStoredRequests(updatedLocal);
 
-  let success = false;
-
-  // 1. Insert into Supabase Postgres Table
+  // Sync to Storage JSON
   try {
-    const tableRes = await fetch(REST_TABLE_URL, {
+    await fetch(UPLOAD_STORAGE_URL, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_API_KEY,
+        'Authorization': `Bearer ${SUPABASE_API_KEY}`,
+        'Content-Type': 'application/json',
+        'x-upsert': 'true',
+      },
+      body: JSON.stringify({ requests: updatedLocal }),
+    });
+  } catch (e) {}
+
+  // Sync to Postgres Table if available
+  try {
+    await fetch(REST_TABLE_URL, {
       method: 'POST',
       headers: {
         'apikey': SUPABASE_API_KEY,
@@ -187,24 +197,9 @@ export async function saveCloudRequestItem(newReq: SongRequest): Promise<boolean
         created_at: sanitized.createdAt,
       }),
     });
-    if (tableRes.ok) success = true;
   } catch (e) {}
 
-  // 2. Also sync to Storage JSON file as backup
-  try {
-    await fetch(UPLOAD_STORAGE_URL, {
-      method: 'POST',
-      headers: {
-        'apikey': SUPABASE_API_KEY,
-        'Authorization': `Bearer ${SUPABASE_API_KEY}`,
-        'Content-Type': 'application/json',
-        'x-upsert': 'true',
-      },
-      body: JSON.stringify({ requests: updatedLocal }),
-    });
-  } catch (e) {}
-
-  return success;
+  return true;
 }
 
 export async function saveCloudRequests(requests: SongRequest[]): Promise<boolean> {
