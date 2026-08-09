@@ -23,12 +23,18 @@ export function App() {
   const urlRole = queryParams.get('role') as 'client' | 'dj' | 'owner' | 'stage' | 'bridge' | null;
   const urlAccessSecret = queryParams.get('access') || queryParams.get('admin');
 
-  // Stealth mode: false for normal customers (Navbar tabs hidden), true for staff
-  const [isStealthAdminUnlocked, setIsStealthAdminUnlocked] = useState<boolean>(
-    Boolean(urlAccessSecret || urlRole === 'dj' || urlRole === 'owner' || urlRole === 'bridge')
-  );
+  // Persistent stealth admin unlock state
+  const [isStealthAdminUnlocked, setIsStealthAdminUnlocked] = useState<boolean>(() => {
+    const savedUnlocked = localStorage.getItem('beatpulse_stealth_unlocked');
+    return Boolean(savedUnlocked === 'true' || urlAccessSecret || urlRole === 'dj' || urlRole === 'owner' || urlRole === 'bridge');
+  });
 
-  const [activeTab, setActiveTab] = useState<'client' | 'dj' | 'owner' | 'stage' | 'bridge'>(urlRole || 'client');
+  // Persistent active portal tab state (remembers if user is DJ / Owner on page refresh)
+  const [activeTab, setActiveTab] = useState<'client' | 'dj' | 'owner' | 'stage' | 'bridge'>(() => {
+    const savedTab = localStorage.getItem('beatpulse_active_tab') as 'client' | 'dj' | 'owner' | 'stage' | 'bridge' | null;
+    return urlRole || savedTab || 'client';
+  });
+
   const [songs] = useState(INITIAL_SONGS);
   
   // Realtime multi-device request queue with Cloud Database Persistence
@@ -68,6 +74,15 @@ export function App() {
     sentCount: 2,
     lastPing: new Date().toISOString()
   });
+
+  // Save activeTab & stealth status persistently to localStorage
+  useEffect(() => {
+    localStorage.setItem('beatpulse_active_tab', activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    localStorage.setItem('beatpulse_stealth_unlocked', isStealthAdminUnlocked ? 'true' : 'false');
+  }, [isStealthAdminUnlocked]);
 
   // 1. Initial Cloud Load on App Mount
   useEffect(() => {
@@ -116,17 +131,21 @@ export function App() {
 
   const handleTabSwitchRequest = (tab: 'client' | 'dj' | 'owner' | 'stage' | 'bridge') => {
     if (tab === 'dj') {
-      setPinPromptRole('dj');
-      setEnteredPin('');
-      setPinError('');
-      return;
+      if (!isStealthAdminUnlocked) {
+        setPinPromptRole('dj');
+        setEnteredPin('');
+        setPinError('');
+        return;
+      }
     }
 
     if (tab === 'owner') {
-      setPinPromptRole('owner');
-      setEnteredPin('');
-      setPinError('');
-      return;
+      if (!isStealthAdminUnlocked) {
+        setPinPromptRole('owner');
+        setEnteredPin('');
+        setPinError('');
+        return;
+      }
     }
 
     setActiveTab(tab);
@@ -152,6 +171,7 @@ export function App() {
     if (pinPromptRole === 'dj') {
       if (enteredPin === DJ_PIN) {
         soundFx.playCoinChime();
+        setIsStealthAdminUnlocked(true);
         setActiveTab('dj');
         setPinPromptRole(null);
       } else {
@@ -161,6 +181,7 @@ export function App() {
     } else if (pinPromptRole === 'owner') {
       if (enteredPin === OWNER_PIN) {
         soundFx.playCoinChime();
+        setIsStealthAdminUnlocked(true);
         setActiveTab('owner');
         setPinPromptRole(null);
         if (!ownerConfig.hasAcceptedTerms) {
