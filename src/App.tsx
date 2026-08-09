@@ -13,9 +13,14 @@ import { SongRequest, RequestStatus, VirtualDJConfig, OwnerConfig } from './type
 import { soundFx } from './services/soundEffects';
 
 export function App() {
-  // Read URL parameters e.g. ?role=client or ?role=screen
   const queryParams = new URLSearchParams(window.location.search);
   const urlRole = queryParams.get('role') as 'client' | 'dj' | 'owner' | 'stage' | 'bridge' | null;
+  const urlAccessSecret = queryParams.get('access') || queryParams.get('admin');
+
+  // Stealth mode: false for normal customers (Navbar tabs hidden), true for staff
+  const [isStealthAdminUnlocked, setIsStealthAdminUnlocked] = useState<boolean>(
+    Boolean(urlAccessSecret || urlRole === 'dj' || urlRole === 'owner' || urlRole === 'bridge')
+  );
 
   const [activeTab, setActiveTab] = useState<'client' | 'dj' | 'owner' | 'stage' | 'bridge'>(urlRole || 'client');
   const [songs] = useState(INITIAL_SONGS);
@@ -24,8 +29,11 @@ export function App() {
   const [ownerConfig, setOwnerConfig] = useState<OwnerConfig>(DEFAULT_OWNER_CONFIG);
   const [isTermsModalOpen, setIsTermsModalOpen] = useState<boolean>(false);
 
+  // Secret 5-tap counter on logo to unlock admin mode
+  const [logoTapCount, setLogoTapCount] = useState<number>(0);
+
   // Security PIN state for DJ and Owner portals
-  const [pinPromptRole, setPinPromptRole] = useState<'dj' | 'owner' | null>(null);
+  const [pinPromptRole, setPinPromptRole] = useState<'dj' | 'owner' | 'admin' | null>(null);
   const [enteredPin, setEnteredPin] = useState<string>('');
   const [pinError, setPinError] = useState<string>('');
 
@@ -46,6 +54,19 @@ export function App() {
   const totalEarnedCOP = validRequests.reduce((sum, r) => sum + r.totalPaidCOP, 0);
   const pendingCount = requests.filter((r) => r.status === 'pending').length;
 
+  const handleSecretLogoTap = () => {
+    const newCount = logoTapCount + 1;
+    setLogoTapCount(newCount);
+
+    if (newCount >= 5) {
+      setLogoTapCount(0);
+      soundFx.playScratch();
+      setPinPromptRole('admin');
+      setEnteredPin('');
+      setPinError('');
+    }
+  };
+
   const handleTabSwitchRequest = (tab: 'client' | 'dj' | 'owner' | 'stage' | 'bridge') => {
     if (tab === 'dj') {
       setPinPromptRole('dj');
@@ -65,13 +86,29 @@ export function App() {
   };
 
   const handleVerifyPin = () => {
+    if (pinPromptRole === 'admin') {
+      if (enteredPin === DJ_PIN || enteredPin === OWNER_PIN) {
+        soundFx.playCoinChime();
+        setIsStealthAdminUnlocked(true);
+        setActiveTab(enteredPin === OWNER_PIN ? 'owner' : 'dj');
+        setPinPromptRole(null);
+        if (enteredPin === OWNER_PIN && !ownerConfig.hasAcceptedTerms) {
+          setIsTermsModalOpen(true);
+        }
+      } else {
+        setPinError('Clave de acceso incorrecta');
+        soundFx.playScratch();
+      }
+      return;
+    }
+
     if (pinPromptRole === 'dj') {
       if (enteredPin === DJ_PIN) {
         soundFx.playCoinChime();
         setActiveTab('dj');
         setPinPromptRole(null);
       } else {
-        setPinError('PIN de Cabina DJ incorrecto (Por defecto: 1234)');
+        setPinError('PIN de Cabina DJ incorrecto (Clave: 1234)');
         soundFx.playScratch();
       }
     } else if (pinPromptRole === 'owner') {
@@ -83,7 +120,7 @@ export function App() {
           setIsTermsModalOpen(true);
         }
       } else {
-        setPinError('PIN de Administrador incorrecto (Por defecto: 9999)');
+        setPinError('PIN de Administrador incorrecto (Clave: 9999)');
         soundFx.playScratch();
       }
     }
@@ -169,7 +206,7 @@ export function App() {
   return (
     <div className="min-h-screen bg-[#08080c] text-slate-100 flex flex-col font-['Outfit',sans-serif]">
       
-      {/* Top Navbar Header with Role Switcher & Pin Security */}
+      {/* Top Header */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={handleTabSwitchRequest}
@@ -177,6 +214,8 @@ export function App() {
         ownerConfig={ownerConfig}
         totalEarnedCOP={totalEarnedCOP}
         pendingCount={pendingCount}
+        isStealthAdminUnlocked={isStealthAdminUnlocked}
+        onSecretLogoTap={handleSecretLogoTap}
       />
 
       {/* Main Content View */}
@@ -225,7 +264,7 @@ export function App() {
         )}
       </main>
 
-      {/* PIN Security Modal for DJ / Owner Access */}
+      {/* PIN Security Modal for Secret Access */}
       {pinPromptRole && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
           <div className="w-full max-w-sm glass-panel-neon rounded-3xl p-6 border border-purple-500/40 space-y-4 text-center">
@@ -233,7 +272,7 @@ export function App() {
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2 text-xs font-bold text-pink-400 uppercase">
                 <KeyRound className="w-4 h-4" />
-                <span>Acceso Restringido por PIN</span>
+                <span>Acceso Restringido Staff</span>
               </div>
               <button onClick={() => setPinPromptRole(null)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
@@ -242,12 +281,16 @@ export function App() {
 
             <div className="space-y-1">
               <h3 className="text-lg font-extrabold text-white">
-                {pinPromptRole === 'dj' ? 'Acceso a Cabina DJ' : 'Panel de Administración del Dueño'}
+                {pinPromptRole === 'admin'
+                  ? 'Panel de Control Staff / DJ / Dueño'
+                  : pinPromptRole === 'dj'
+                  ? 'Acceso a Cabina DJ'
+                  : 'Panel de Administración del Dueño'}
               </h3>
               <p className="text-xs text-slate-300">
                 {pinPromptRole === 'dj'
-                  ? 'Ingresa la clave de acceso del DJ (Por defecto: 1234)'
-                  : 'Ingresa la clave de acceso del Dueño (Por defecto: 9999)'}
+                  ? 'Ingresa el PIN del DJ (Clave: 1234)'
+                  : 'Ingresa el PIN del Administrador (Clave: 9999)'}
               </p>
             </div>
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Smartphone, Disc3, Tv, Cable, Building, ShieldCheck, DollarSign } from 'lucide-react';
+import { Smartphone, Disc3, Tv, Cable, Building, DollarSign } from 'lucide-react';
 import { VirtualDJConfig, OwnerConfig } from '../types';
 
 interface NavbarProps {
@@ -9,6 +9,8 @@ interface NavbarProps {
   ownerConfig: OwnerConfig;
   totalEarnedCOP: number;
   pendingCount: number;
+  isStealthAdminUnlocked: boolean;
+  onSecretLogoTap: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -18,13 +20,55 @@ export const Navbar: React.FC<NavbarProps> = ({
   ownerConfig,
   totalEarnedCOP,
   pendingCount,
+  isStealthAdminUnlocked,
+  onSecretLogoTap,
 }) => {
+  // If not unlocked by secret tap or secret URL, render ONLY the clean customer header (No Navbar tabs visible!)
+  if (!isStealthAdminUnlocked && activeTab === 'client') {
+    return (
+      <header className="sticky top-0 z-50 glass-panel border-b border-purple-500/20 px-4 py-3">
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
+          
+          {/* Clean Brand Logo (Secret 5-Tap Listener for Staff) */}
+          <div
+            onClick={onSecretLogoTap}
+            className="flex items-center gap-3 cursor-pointer select-none"
+            title="BeatPulse DJ"
+          >
+            <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 via-pink-500 to-cyan-400 p-[2px] shadow-lg shadow-purple-500/30">
+              <div className="w-full h-full bg-[#0d0d15] rounded-[10px] flex items-center justify-center">
+                <Disc3 className="w-6 h-6 text-pink-400 animate-spin-slow" />
+              </div>
+            </div>
+            <div>
+              <h1 className="font-extrabold text-lg tracking-tight text-white">
+                BeatPulse <span className="text-gradient-neon">DJ</span>
+              </h1>
+              <p className="text-[11px] text-slate-400 font-medium">{ownerConfig.clubName}</p>
+            </div>
+          </div>
+
+          {/* Clean Status Badge for Customer */}
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-extrabold">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+            <span>CABINA EN VIVO</span>
+          </div>
+
+        </div>
+      </header>
+    );
+  }
+
+  // Admin Unlocked Mode (Displays full control tabs for DJ & Owner)
   return (
     <header className="sticky top-0 z-50 glass-panel border-b border-purple-500/20 px-4 py-3">
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-3">
         
         {/* Brand logo */}
-        <div className="flex items-center gap-3">
+        <div
+          onClick={onSecretLogoTap}
+          className="flex items-center gap-3 cursor-pointer select-none"
+        >
           <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 via-pink-500 to-cyan-400 p-[2px] shadow-lg shadow-purple-500/30">
             <div className="w-full h-full bg-[#0d0d15] rounded-[10px] flex items-center justify-center">
               <Disc3 className="w-6 h-6 text-pink-400 animate-spin-slow" />
@@ -35,11 +79,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               <h1 className="font-extrabold text-xl tracking-tight text-white">
                 BeatPulse <span className="text-gradient-neon">DJ</span>
               </h1>
-              <span className="px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30">
-                COLOMBIA
+              <span className="px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                MODO ADMIN
               </span>
             </div>
-            <p className="text-xs text-slate-400 font-medium">{ownerConfig.clubName} • VirtualDJ Connected</p>
+            <p className="text-xs text-slate-400 font-medium">{ownerConfig.clubName}</p>
           </div>
         </div>
 
