@@ -43,7 +43,7 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [rejectionModalReqId, setRejectionModalReqId] = useState<string | null>(null);
 
-  // Standalone Sound System Player State (When NO VirtualDJ PC is present)
+  // Standalone Sound System Player State
   const [soundSystemMode, setSoundSystemMode] = useState<'virtualdj' | 'web_player' | 'spotify'>('web_player');
   const [isPlayingWebAudio, setIsPlayingWebAudio] = useState<boolean>(false);
   const [currentPlayingReq, setCurrentPlayingReq] = useState<SongRequest | null>(null);
@@ -82,7 +82,6 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
       audio.onended = () => {
         setIsPlayingWebAudio(false);
         onUpdateRequestStatus(req.id, 'completed');
-        // Play next request automatically
         const next = requests.find((r) => (r.status === 'accepted' || r.status === 'pending') && r.id !== req.id);
         if (next) {
           handlePlaySongStandalone(next);
@@ -303,15 +302,15 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
         </div>
       </div>
 
-      {/* Main Request Queue Deck */}
+      {/* Main Request Queue Deck Header (Renamed to "Cola de Pedidos") */}
       <div className="glass-panel-neon rounded-3xl p-6 border border-purple-500/30 space-y-6">
         
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Disc3 className="w-7 h-7 text-pink-400 animate-spin-slow" />
             <div>
-              <h3 className="text-xl font-extrabold text-white">Cola de Pedidos Nequi / Bancolombia</h3>
-              <p className="text-xs text-slate-400">Verifica el pago Nequi/Bancolombia y aprueba para proyectar en la Pantalla del Club</p>
+              <h3 className="text-xl font-extrabold text-white">Cola de Pedidos</h3>
+              <p className="text-xs text-slate-400">Verifica el pago del cliente y aprueba para proyectar en la Pantalla del Club</p>
             </div>
           </div>
 
@@ -340,9 +339,9 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
         {filteredRequests.length === 0 ? (
           <div className="p-12 text-center text-slate-400 glass-panel rounded-3xl space-y-3 border border-white/10">
             <Music className="w-12 h-12 mx-auto text-purple-400 opacity-40 animate-bounce" />
-            <h4 className="text-base font-bold text-white">No hay canciones en la lista "{filterStatus}"</h4>
+            <h4 className="text-base font-bold text-white">No hay canciones en la cola</h4>
             <p className="text-xs text-slate-400 max-w-sm mx-auto">
-              Pide una canción desde el celular del cliente o escanea el QR para verificar el flujo de trabajo en tiempo real.
+              Las canciones solicitadas por los clientes desde sus teléfonos aparecerán automáticamente aquí para tu aprobación.
             </p>
           </div>
         ) : (

@@ -12,11 +12,12 @@ import { INITIAL_SONGS, INITIAL_REQUESTS, DEFAULT_OWNER_CONFIG } from './data/mo
 import { SongRequest, RequestStatus, VirtualDJConfig, OwnerConfig } from './types';
 import { soundFx } from './services/soundEffects';
 import {
-  fetchCloudRequests,
-  saveCloudRequests,
   getLocalStoredRequests,
+  saveLocalStoredRequests,
   getOrCreateDeviceId,
-  subscribeToRealtimeChanges
+  broadcastNewRequestToCloud,
+  broadcastStatusUpdateToCloud,
+  subscribeToGlobalRealtime
 } from './services/realtimeSyncService';
 
 export function App() {
@@ -38,7 +39,7 @@ export function App() {
 
   const [songs] = useState(INITIAL_SONGS);
   
-  // Realtime multi-device request queue with BroadcastChannel & Persistent LocalStorage
+  // Realtime request queue
   const [requests, setRequests] = useState<SongRequest[]>(() => {
     return getLocalStoredRequests();
   });
@@ -75,11 +76,26 @@ export function App() {
     lastPing: new Date().toISOString()
   });
 
-  // Realtime subscription listener across tabs/windows
+  // GLOBAL REALTIME SSE SUBSCRIBER (Instant cross-device sync across internet)
   useEffect(() => {
-    const unsubscribe = subscribeToRealtimeChanges((updatedReqs) => {
-      setRequests(updatedReqs);
-    });
+    const unsubscribe = subscribeToGlobalRealtime(
+      (newCloudReq) => {
+        setRequests((prev) => {
+          if (prev.some((r) => r.id === newCloudReq.id)) return prev;
+          const updated = [newCloudReq, ...prev];
+          saveLocalStoredRequests(updated);
+          return updated;
+        });
+      },
+      (requestId, status, reason) => {
+        setRequests((prev) => {
+          const updated = prev.map((r) => (r.id === requestId ? { ...r, status: status as RequestStatus, rejectionReason: reason } : r));
+          saveLocalStoredRequests(updated);
+          return updated;
+        });
+      }
+    );
+
     return () => unsubscribe();
   }, []);
 
@@ -204,7 +220,7 @@ export function App() {
       id: `req-${Date.now()}`,
       deviceId,
       createdAt: new Date().toISOString(),
-      status: 'pending', // Shows in DJ Booth first!
+      status: 'pending', // Starts in DJ Booth queue as Pending!
       platformFeeCOP,
       djShareCOP,
       clubShareCOP,
@@ -212,7 +228,11 @@ export function App() {
 
     const updatedRequests = [newRequest, ...requests];
     setRequests(updatedRequests);
-    saveCloudRequests(updatedRequests);
+    saveLocalStoredRequests(updatedRequests);
+
+    // Broadcast globally to DJ Booth across the internet via SSE
+    broadcastNewRequestToCloud(newRequest);
+
     soundFx.playAirhorn();
   };
 
@@ -236,7 +256,10 @@ export function App() {
     });
 
     setRequests(updatedRequests);
-    saveCloudRequests(updatedRequests);
+    saveLocalStoredRequests(updatedRequests);
+
+    // Broadcast status update globally
+    broadcastStatusUpdateToCloud(requestId, newStatus, reason);
   };
 
   const handleUpdateOwnerConfig = (updatedFields: Partial<OwnerConfig>) => {

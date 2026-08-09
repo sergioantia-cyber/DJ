@@ -1,10 +1,15 @@
 import { SongRequest } from '../types';
 
-const LOCAL_STORAGE_KEY = 'beatpulse_master_requests_v3';
+const LOCAL_STORAGE_KEY = 'beatpulse_master_requests_v4';
 const DEVICE_ID_KEY = 'beatpulse_user_device_id';
 
-// BroadcastChannel for instant zero-latency cross-tab synchronization
-const broadcastChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('beatpulse_realtime_channel') : null;
+// Global SSE Realtime Topic for BeatPulse DJ Club Ibiza
+const NTFY_TOPIC = 'beatpulse_dj_club_ibiza_session_2026';
+const NTFY_PUBLISH_URL = `https://ntfy.sh/${NTFY_TOPIC}`;
+const NTFY_SSE_URL = `https://ntfy.sh/${NTFY_TOPIC}/json`;
+
+// BroadcastChannel for instant local tab sync
+const broadcastChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('beatpulse_channel') : null;
 
 export function getLocalStoredRequests(): SongRequest[] {
   try {
@@ -30,44 +35,72 @@ export function saveLocalStoredRequests(requests: SongRequest[]): void {
   }
 }
 
-// Merge local and remote request arrays by unique ID (preserves all orders)
-export function mergeRequests(local: SongRequest[], remote: SongRequest[]): SongRequest[] {
-  const map = new Map<string, SongRequest>();
+// Publish new request globally across all devices on the internet
+export async function broadcastNewRequestToCloud(newReq: SongRequest): Promise<void> {
+  try {
+    await fetch(NTFY_PUBLISH_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'NEW_REQUEST',
+        request: newReq,
+      }),
+    });
+  } catch (err) {
+    console.warn('Global SSE publish error:', err);
+  }
+}
 
-  // Add remote first
-  for (const req of remote) {
-    if (req && req.id) map.set(req.id, req);
+// Publish status update (accept/reject/play) globally across all devices
+export async function broadcastStatusUpdateToCloud(requestId: string, status: string, reason?: string): Promise<void> {
+  try {
+    await fetch(NTFY_PUBLISH_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'UPDATE_STATUS',
+        requestId,
+        status,
+        reason,
+      }),
+    });
+  } catch (err) {
+    console.warn('Global SSE status update error:', err);
+  }
+}
+
+// Subscribe to global realtime updates from any phone/laptop worldwide
+export function subscribeToGlobalRealtime(
+  onNewRequest: (req: SongRequest) => void,
+  onStatusUpdate: (requestId: string, status: string, reason?: string) => void
+): () => void {
+  let eventSource: EventSource | null = null;
+
+  try {
+    eventSource = new EventSource(NTFY_SSE_URL);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload && payload.message) {
+          const data = JSON.parse(payload.message);
+
+          if (data.action === 'NEW_REQUEST' && data.request) {
+            onNewRequest(data.request);
+          } else if (data.action === 'UPDATE_STATUS' && data.requestId && data.status) {
+            onStatusUpdate(data.requestId, data.status, data.reason);
+          }
+        }
+      } catch (e) {
+        // Ignore heartbeats or non-JSON messages
+      }
+    };
+  } catch (err) {
+    console.warn('EventSource connection error:', err);
   }
 
-  // Add or override with local (preserves newly created local requests)
-  for (const req of local) {
-    if (req && req.id) map.set(req.id, req);
-  }
-
-  // Sort by createdAt descending
-  return Array.from(map.values()).sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
-}
-
-// Public cloud storage relay fallback
-const CLOUD_API_ENDPOINT = 'https://api.jsonbin.io/v3/b';
-
-export async function fetchCloudRequests(): Promise<SongRequest[]> {
-  const local = getLocalStoredRequests();
-  return local;
-}
-
-export async function saveCloudRequests(requests: SongRequest[]): Promise<boolean> {
-  saveLocalStoredRequests(requests);
-  return true;
-}
-
-export function subscribeToRealtimeChanges(onUpdate: (requests: SongRequest[]) => void): () => void {
-  // Listen to BroadcastChannel
+  // Also listen for BroadcastChannel local tab changes
   const handleBroadcast = (event: MessageEvent) => {
     if (event.data && event.data.type === 'REQUESTS_UPDATED' && Array.isArray(event.data.requests)) {
-      onUpdate(event.data.requests);
+      // Local sync handled in App
     }
   };
 
@@ -75,21 +108,9 @@ export function subscribeToRealtimeChanges(onUpdate: (requests: SongRequest[]) =
     broadcastChannel.addEventListener('message', handleBroadcast);
   }
 
-  // Listen to window storage event for cross-window sync
-  const handleStorage = (e: StorageEvent) => {
-    if (e.key === LOCAL_STORAGE_KEY) {
-      const updated = getLocalStoredRequests();
-      onUpdate(updated);
-    }
-  };
-
-  window.addEventListener('storage', handleStorage);
-
   return () => {
-    if (broadcastChannel) {
-      broadcastChannel.removeEventListener('message', handleBroadcast);
-    }
-    window.removeEventListener('storage', handleStorage);
+    if (eventSource) eventSource.close();
+    if (broadcastChannel) broadcastChannel.removeEventListener('message', handleBroadcast);
   };
 }
 
