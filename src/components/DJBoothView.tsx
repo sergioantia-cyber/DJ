@@ -19,7 +19,8 @@ import {
   Smartphone,
   Sliders,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 import { SongRequest, RequestStatus, VirtualDJConfig, OwnerConfig } from '../types';
 import { soundFx } from '../services/soundEffects';
@@ -29,6 +30,7 @@ interface DJBoothViewProps {
   vdjConfig: VirtualDJConfig;
   ownerConfig: OwnerConfig;
   onUpdateRequestStatus: (requestId: string, newStatus: RequestStatus, reason?: string) => void;
+  onDeleteRequest: (requestId: string) => void;
   onToggleAutoAccept: () => void;
 }
 
@@ -37,6 +39,7 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
   vdjConfig,
   ownerConfig,
   onUpdateRequestStatus,
+  onDeleteRequest,
   onToggleAutoAccept,
 }) => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -55,7 +58,7 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
   const djEarnedCOP = validRequests.reduce((sum, r) => sum + (r.djShareCOP || 0), 0);
 
   const filteredRequests = requests.filter((r) => {
-    if (filterStatus === 'all') return true;
+    if (filterStatus === 'all') return r.status !== 'completed' && r.status !== 'rejected';
     if (filterStatus === 'pending') return r.status === 'pending';
     if (filterStatus === 'active') return r.status === 'accepted' || r.status === 'sent_to_vdj';
     if (filterStatus === 'playing') return r.status === 'playing';
@@ -80,7 +83,7 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
 
       audio.onended = () => {
         setIsPlayingWebAudio(false);
-        onUpdateRequestStatus(req.id, 'completed');
+        onDeleteRequest(req.id); // Delete completed song cleanly from queue
         const next = requests.find((r) => (r.status === 'accepted' || r.status === 'pending') && r.id !== req.id);
         if (next) {
           handlePlaySongStandalone(next);
@@ -110,7 +113,7 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
 
   const handleConfirmReject = (reason: string) => {
     if (!rejectionModalReqId) return;
-    onUpdateRequestStatus(rejectionModalReqId, 'rejected', reason);
+    onDeleteRequest(rejectionModalReqId); // Delete rejected song cleanly from queue
     setRejectionModalReqId(null);
   };
 
@@ -263,12 +266,12 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
           </div>
         </div>
 
-        {/* Total Songs in Queue */}
+        {/* Total Active Songs in Queue */}
         <div className="glass-panel rounded-2xl p-5 border border-white/10 flex items-center justify-between">
           <div>
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total en Registro</span>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Canciones en Cola</span>
             <div className="text-3xl font-extrabold text-white mt-1">
-              {requests.length} <span className="text-xs text-slate-400 font-normal">canciones</span>
+              {filteredRequests.length} <span className="text-xs text-slate-400 font-normal">activas</span>
             </div>
             <p className="text-[10px] text-purple-300 mt-1">Sincronizado en Vivo</p>
           </div>
@@ -315,11 +318,10 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
 
           <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/10 overflow-x-auto">
             {[
-              { id: 'all', label: `Todos (${requests.length})` },
+              { id: 'all', label: `Todos (${requests.filter((r) => r.status !== 'completed' && r.status !== 'rejected').length})` },
               { id: 'pending', label: `Pendientes (${pendingRequests.length})` },
               { id: 'active', label: 'En Cola' },
               { id: 'playing', label: 'Sonando' },
-              { id: 'rejected', label: 'Rechazados' },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -338,7 +340,7 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
         {filteredRequests.length === 0 ? (
           <div className="p-12 text-center text-slate-400 glass-panel rounded-3xl space-y-3 border border-white/10">
             <Music className="w-12 h-12 mx-auto text-purple-400 opacity-40 animate-bounce" />
-            <h4 className="text-base font-bold text-white">No hay canciones en la cola</h4>
+            <h4 className="text-base font-bold text-white">No hay canciones activas en la cola</h4>
             <p className="text-xs text-slate-400 max-w-sm mx-auto">
               Las canciones solicitadas por los clientes desde sus teléfonos aparecerán automáticamente aquí para tu aprobación.
             </p>
@@ -408,13 +410,6 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
                         <Play className="w-4 h-4 fill-white" />
                         <span>Sonar Ahora</span>
                       </button>
-
-                      <button
-                        onClick={() => setRejectionModalReqId(req.id)}
-                        className="px-3 py-2 rounded-xl bg-rose-600/20 text-rose-300 font-bold text-xs border border-rose-500/30"
-                      >
-                        <XCircle className="w-4 h-4" />
-                      </button>
                     </>
                   )}
 
@@ -433,6 +428,15 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
                       SONANDO AHORA EN PANTALLA
                     </span>
                   )}
+
+                  {/* Trash / Delete button to permanently clear song */}
+                  <button
+                    onClick={() => onDeleteRequest(req.id)}
+                    className="p-2 rounded-xl bg-rose-600/20 hover:bg-rose-600 text-rose-400 hover:text-white font-bold text-xs border border-rose-500/30 transition-all"
+                    title="Eliminar de la Cola"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             ))}

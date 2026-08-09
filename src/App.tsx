@@ -228,6 +228,14 @@ export function App() {
     saveCloudRequests(updatedRequests);
   };
 
+  // Permanently delete a request from queue and Supabase Cloud
+  const handleDeleteRequest = (requestId: string) => {
+    soundFx.playScratch();
+    const updatedRequests = requests.filter((r) => r.id !== requestId);
+    setRequests(updatedRequests);
+    saveCloudRequests(updatedRequests);
+  };
+
   const handleUpdateOwnerConfig = (updatedFields: Partial<OwnerConfig>) => {
     setOwnerConfig((prev) => ({ ...prev, ...updatedFields }));
   };
@@ -277,6 +285,7 @@ export function App() {
             vdjConfig={vdjConfig}
             ownerConfig={ownerConfig}
             onUpdateRequestStatus={handleUpdateRequestStatus}
+            onDeleteRequest={handleDeleteRequest}
             onToggleAutoAccept={handleToggleAutoAccept}
           />
         )}
