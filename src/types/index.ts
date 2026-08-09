@@ -32,6 +32,7 @@ export type PaymentMethodType = 'nequi_qr' | 'bancolombia_qr' | 'pse_qr';
 
 export interface SongRequest {
   id: string;
+  deviceId?: string; // Unique persistent device ID fingerprint
   song: Song;
   userName: string;
   tableNumber: string;

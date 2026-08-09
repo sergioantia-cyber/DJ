@@ -1,10 +1,18 @@
 import { SongRequest } from '../types';
 
-// Real-Time Cross-Device Cloud Sync Service for BeatPulse DJ
-// Synchronizes requests across all phones, tablets, and computers connected to Vercel
-
 const SESSION_KEY = 'beatpulse_club_ibiza_requests';
+const DEVICE_ID_KEY = 'beatpulse_user_device_id';
 const CLOUD_SYNC_ENDPOINT = 'https://api.restful-api.dev/objects/beatpulse_live_session_101';
+
+// Generate or retrieve persistent unique Device ID fingerprint
+export function getOrCreateDeviceId(): string {
+  let deviceId = localStorage.getItem(DEVICE_ID_KEY);
+  if (!deviceId) {
+    deviceId = `dev_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    localStorage.setItem(DEVICE_ID_KEY, deviceId);
+  }
+  return deviceId;
+}
 
 export async function fetchCloudRequests(): Promise<SongRequest[] | null> {
   try {
@@ -13,13 +21,11 @@ export async function fetchCloudRequests(): Promise<SongRequest[] | null> {
     const data = await response.json();
 
     if (data && data.data && Array.isArray(data.data.requests)) {
-      // Update local storage cache
       localStorage.setItem(SESSION_KEY, JSON.stringify(data.data.requests));
       return data.data.requests;
     }
     return null;
   } catch (err) {
-    // Fallback to localStorage if offline
     const local = localStorage.getItem(SESSION_KEY);
     if (local) {
       try {
@@ -33,7 +39,6 @@ export async function fetchCloudRequests(): Promise<SongRequest[] | null> {
 }
 
 export async function saveCloudRequests(requests: SongRequest[]): Promise<boolean> {
-  // Save to localStorage immediately
   localStorage.setItem(SESSION_KEY, JSON.stringify(requests));
 
   try {

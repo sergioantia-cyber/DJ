@@ -18,13 +18,17 @@ import {
   Globe,
   Loader2,
   Tv,
-  PhoneCall
+  PhoneCall,
+  Calendar,
+  ShieldCheck,
+  CheckCircle2
 } from 'lucide-react';
 import { Song, PriorityOption, Genre, SongRequest, OwnerConfig, PaymentMethodType } from '../types';
 import { INITIAL_PRIORITY_OPTIONS } from '../data/mockDatabase';
 import { NequiBancolombiaPaymentModal } from './NequiBancolombiaPaymentModal';
 import { StageScreenView } from './StageScreenView';
 import { searchLiveWebMusic, fetchDefaultTopClubHits } from '../services/musicSearchService';
+import { getOrCreateDeviceId } from '../services/realtimeSyncService';
 import { soundFx } from '../services/soundEffects';
 
 interface ClientViewProps {
@@ -40,6 +44,8 @@ export const ClientView: React.FC<ClientViewProps> = ({
   ownerConfig,
   onSubmitRequest,
 }) => {
+  const [currentDeviceId] = useState<string>(() => getOrCreateDeviceId());
+
   const [selectedGenre, setSelectedGenre] = useState<string>('Todos');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [searchResults, setSearchResults] = useState<Song[]>([]);
@@ -64,6 +70,11 @@ export const ClientView: React.FC<ClientViewProps> = ({
   const [activeTab, setActiveTab] = useState<'catalog' | 'my_requests' | 'stage_screen'>('catalog');
 
   const genresList = ['Todos', 'Reggaeton', 'Electro / House', 'Techno & EDM', 'Salsa & Bachata', 'Trap & Urban', 'Pop Hits'];
+
+  // Filter requests placed from this device ID
+  const myDeviceRequests = userRequests.filter(
+    (r) => !r.deviceId || r.deviceId === currentDeviceId
+  );
 
   // Initial load of real top hits from iTunes API
   useEffect(() => {
@@ -180,7 +191,7 @@ export const ClientView: React.FC<ClientViewProps> = ({
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
       
-      {/* Top Ultra-Attractive Party Banner (No Payment Method mentions in Title) */}
+      {/* Top Ultra-Attractive Party Banner */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-purple-900/50 via-pink-900/40 to-slate-900/90 border border-purple-500/40 p-6 sm:p-8 shadow-2xl">
         <div className="absolute top-0 right-0 -mt-10 -mr-10 w-48 h-48 bg-pink-500/20 rounded-full blur-3xl pointer-events-none"></div>
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
@@ -218,9 +229,9 @@ export const ClientView: React.FC<ClientViewProps> = ({
             >
               <Radio className="w-3.5 h-3.5 animate-pulse text-pink-300" />
               <span>Mis Pedidos</span>
-              {userRequests.length > 0 && (
+              {myDeviceRequests.length > 0 && (
                 <span className="px-1.5 py-0.5 rounded-full bg-white/20 text-[10px]">
-                  {userRequests.length}
+                  {myDeviceRequests.length}
                 </span>
               )}
             </button>
@@ -359,42 +370,69 @@ export const ClientView: React.FC<ClientViewProps> = ({
         </>
       )}
 
+      {/* MY REQUESTS HISTORICAL RADAR (PERSISTENT DEVICE IDENTIFIER) */}
       {activeTab === 'my_requests' && (
         <div className="space-y-4">
-          <h3 className="text-lg font-bold text-white flex items-center gap-2">
-            <Radio className="w-5 h-5 text-pink-400 animate-pulse" />
-            <span>Mis Solicitudes de Música</span>
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <Radio className="w-5 h-5 text-pink-400 animate-pulse" />
+              <span>Historial de Mis Pedidos y Dedicatorias</span>
+            </h3>
+            <span className="text-[10px] font-mono text-purple-300 bg-purple-900/40 px-2 py-1 rounded-md border border-purple-500/30">
+              ID Dispositivo: {currentDeviceId.substring(0, 14)}...
+            </span>
+          </div>
 
-          {userRequests.length === 0 ? (
+          {myDeviceRequests.length === 0 ? (
             <div className="glass-panel rounded-3xl p-8 text-center space-y-2 border border-white/10">
               <Music className="w-10 h-10 text-slate-600 mx-auto animate-bounce" />
-              <p className="text-white font-bold">Aún no has solicitado ninguna canción</p>
-              <p className="text-slate-400 text-xs">Busca tu tema favorito y envíalo con Nequi o Bancolombia.</p>
+              <p className="text-white font-bold">Aún no has solicitado ninguna canción desde este dispositivo</p>
+              <p className="text-slate-400 text-xs">Tus canciones y dedicatorias quedarán guardadas automáticamente en tu celular.</p>
             </div>
           ) : (
-            userRequests.map((req) => (
-              <div key={req.id} className="glass-panel-neon rounded-3xl p-5 border border-purple-500/30 space-y-3">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <img src={req.song.albumCover} alt={req.song.title} className="w-14 h-14 rounded-2xl object-cover" />
-                    <div>
-                      <h4 className="font-bold text-white text-base">{req.song.title}</h4>
-                      <p className="text-xs text-slate-400">{req.song.artist} • ${req.totalPaidCOP.toLocaleString('es-CO')} COP</p>
+            <div className="space-y-3">
+              {myDeviceRequests.map((req) => (
+                <div key={req.id} className="glass-panel-neon rounded-3xl p-5 border border-purple-500/30 space-y-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <img src={req.song.albumCover} alt={req.song.title} className="w-14 h-14 rounded-2xl object-cover shadow-md flex-shrink-0" />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-white text-base truncate">{req.song.title}</h4>
+                          <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                            {req.priority.badge}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 truncate">{req.song.artist} • ${req.totalPaidCOP.toLocaleString('es-CO')} COP</p>
+                        
+                        <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400 font-mono">
+                          <Calendar className="w-3 h-3 text-purple-400" />
+                          <span>{new Date(req.createdAt).toLocaleDateString('es-CO')} • {new Date(req.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                      </div>
                     </div>
+
+                    <span className={`px-3 py-1 rounded-full text-xs font-extrabold flex-shrink-0 ${
+                      req.status === 'playing' ? 'bg-pink-500 text-white animate-pulse' : 'bg-emerald-500/20 text-emerald-300'
+                    }`}>
+                      {req.status === 'pending' && '⏳ Esperando DJ'}
+                      {req.status === 'accepted' && '✅ Aprobado'}
+                      {req.status === 'sent_to_vdj' && '⚡ En VirtualDJ'}
+                      {req.status === 'playing' && '🎵 SONANDO AHORA'}
+                    </span>
                   </div>
 
-                  <span className={`px-3 py-1 rounded-full text-xs font-extrabold ${
-                    req.status === 'playing' ? 'bg-pink-500 text-white animate-pulse' : 'bg-emerald-500/20 text-emerald-300'
-                  }`}>
-                    {req.status === 'pending' && '⏳ Esperando DJ'}
-                    {req.status === 'accepted' && '✅ Aprobado'}
-                    {req.status === 'sent_to_vdj' && '⚡ En VirtualDJ'}
-                    {req.status === 'playing' && '🎵 SONANDO AHORA'}
-                  </span>
+                  {req.dedicatedMessage && (
+                    <div className="p-3 rounded-2xl bg-pink-500/10 border border-pink-500/20 text-xs text-pink-200 flex items-start gap-2">
+                      <MessageSquare className="w-4 h-4 text-pink-400 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="text-pink-300 block">Dedicatoria para Pantallas:</strong> "{req.dedicatedMessage}"
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
       )}

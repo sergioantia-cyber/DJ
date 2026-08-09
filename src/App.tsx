@@ -11,7 +11,12 @@ import { Lock, ShieldCheck, KeyRound, X } from 'lucide-react';
 import { INITIAL_SONGS, INITIAL_REQUESTS, DEFAULT_OWNER_CONFIG } from './data/mockDatabase';
 import { SongRequest, RequestStatus, VirtualDJConfig, OwnerConfig } from './types';
 import { soundFx } from './services/soundEffects';
-import { fetchCloudRequests, saveCloudRequests, getLocalStoredRequests } from './services/realtimeSyncService';
+import {
+  fetchCloudRequests,
+  saveCloudRequests,
+  getLocalStoredRequests,
+  getOrCreateDeviceId
+} from './services/realtimeSyncService';
 
 export function App() {
   const queryParams = new URLSearchParams(window.location.search);
@@ -26,7 +31,7 @@ export function App() {
   const [activeTab, setActiveTab] = useState<'client' | 'dj' | 'owner' | 'stage' | 'bridge'>(urlRole || 'client');
   const [songs] = useState(INITIAL_SONGS);
   
-  // Realtime multi-device request queue
+  // Realtime multi-device request queue with Device ID Fingerprint
   const [requests, setRequests] = useState<SongRequest[]>(() => {
     const local = getLocalStoredRequests();
     return local.length > 0 ? local : INITIAL_REQUESTS;
@@ -162,17 +167,42 @@ export function App() {
     const djShareCOP = totalPaid * (ownerConfig.djSharePercent / 100);
     const clubShareCOP = totalPaid * (ownerConfig.clubSharePercent / 100);
 
+    const deviceId = getOrCreateDeviceId();
+
+    // Check if there is ALREADY a song currently playing
+    const currentlyPlayingSong = requests.find((r) => r.status === 'playing');
+
+    let initialStatus: RequestStatus = 'accepted';
+    if (!currentlyPlayingSong) {
+      // No song currently sounding -> Start playing immediately!
+      initialStatus = 'playing';
+    } else {
+      // A song is currently sounding -> Do NOT interrupt! Queue as accepted (Play Next if priority is play_now)
+      initialStatus = 'accepted';
+    }
+
     const newRequest: SongRequest = {
       ...newReqData,
       id: `req-${Date.now()}`,
+      deviceId,
       createdAt: new Date().toISOString(),
-      status: 'playing', // Instant play on Club Screen!
+      status: initialStatus,
       platformFeeCOP,
       djShareCOP,
       clubShareCOP,
     };
 
-    const updatedRequests = [newRequest, ...requests];
+    let updatedRequests: SongRequest[] = [];
+    if (newReqData.priority.id === 'play_now' && currentlyPlayingSong) {
+      // Insert right after the currently playing song (at index 1)
+      const playingIndex = requests.findIndex((r) => r.status === 'playing');
+      const copy = [...requests];
+      copy.splice(playingIndex + 1, 0, newRequest);
+      updatedRequests = copy;
+    } else {
+      updatedRequests = [newRequest, ...requests];
+    }
+
     setRequests(updatedRequests);
     saveCloudRequests(updatedRequests);
     soundFx.playAirhorn();
