@@ -180,23 +180,24 @@ export const ClientView: React.FC<ClientViewProps> = ({
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
       
-      {/* Top Location Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-purple-900/40 via-indigo-900/30 to-slate-900/80 border border-purple-500/30 p-6 shadow-2xl">
+      {/* Top Ultra-Attractive Party Banner (No Payment Method mentions in Title) */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-purple-900/50 via-pink-900/40 to-slate-900/90 border border-purple-500/40 p-6 sm:p-8 shadow-2xl">
+        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-48 h-48 bg-pink-500/20 rounded-full blur-3xl pointer-events-none"></div>
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
           <div>
-            <div className="flex items-center gap-2 text-xs font-bold text-pink-400 uppercase tracking-widest mb-1">
-              <QrCode className="w-4 h-4" /> Conectado a {ownerConfig.clubName}
+            <div className="flex items-center gap-2 text-xs font-black text-pink-400 uppercase tracking-widest mb-1.5">
+              <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" /> Conectado en Vivo a {ownerConfig.clubName}
             </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Pide tu música con <span className="text-gradient-neon">Nequi o Bancolombia</span>
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight leading-tight">
+              ¡Haz que la fiesta suene <span className="text-gradient-neon">a tu ritmo!</span> 🔥
             </h2>
-            <p className="text-sm text-slate-300 mt-1">
-              Escanea el QR en tu mesa, haz la transferencia y mira tu dedicatoria en la pantalla del club 🪩
+            <p className="text-sm text-slate-200 mt-1.5 font-medium leading-relaxed">
+              Elige tu canción favorita, enlázala directo a la cabina del DJ y proyecta tu dedicatoria en las pantallas del club 🪩✨
             </p>
           </div>
 
           {/* Customer Tabs Switcher */}
-          <div className="flex items-center bg-black/40 p-1.5 rounded-2xl border border-white/10 w-full sm:w-auto overflow-x-auto">
+          <div className="flex items-center bg-black/50 p-1.5 rounded-2xl border border-white/10 w-full sm:w-auto overflow-x-auto flex-shrink-0">
             <button
               onClick={() => setActiveTab('catalog')}
               className={`flex-1 sm:flex-initial px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
@@ -544,7 +545,7 @@ export const ClientView: React.FC<ClientViewProps> = ({
                 className="w-full py-4 rounded-2xl bg-gradient-to-r from-pink-600 via-purple-600 to-amber-500 text-white font-extrabold text-sm shadow-xl shadow-pink-600/40 flex items-center justify-center gap-2"
               >
                 <Smartphone className="w-5 h-5" />
-                <span>Pagar con Nequi o Bancolombia QR</span>
+                <span>Enviar Canción y Pagar por QR</span>
               </button>
             </div>
 
