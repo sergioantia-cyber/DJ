@@ -1,5 +1,5 @@
 import React from 'react';
-import { Smartphone, Disc3, Tv, Cable, Building, DollarSign } from 'lucide-react';
+import { Disc3, Music, DollarSign, Smartphone, Tv, Cpu, ShieldAlert, Sparkles, Volume2 } from 'lucide-react';
 import { VirtualDJConfig, OwnerConfig } from '../types';
 
 interface NavbarProps {
@@ -10,6 +10,7 @@ interface NavbarProps {
   totalEarnedCOP: number;
   pendingCount: number;
   isStealthAdminUnlocked: boolean;
+  unlockedRole?: 'dj' | 'owner' | null;
   onSecretLogoTap: () => void;
 }
 
@@ -21,144 +22,115 @@ export const Navbar: React.FC<NavbarProps> = ({
   totalEarnedCOP,
   pendingCount,
   isStealthAdminUnlocked,
+  unlockedRole = 'dj',
   onSecretLogoTap,
 }) => {
-  // If not unlocked by secret tap or secret URL, render ONLY the clean customer header (No Navbar tabs visible!)
-  if (!isStealthAdminUnlocked && activeTab === 'client') {
-    return (
-      <header className="sticky top-0 z-50 glass-panel border-b border-purple-500/20 px-4 py-3">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          
-          {/* Clean Brand Logo (Secret 5-Tap Listener for Staff) */}
-          <div
-            onClick={onSecretLogoTap}
-            className="flex items-center gap-3 cursor-pointer select-none"
-            title="BeatPulse DJ"
-          >
-            <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 via-pink-500 to-cyan-400 p-[2px] shadow-lg shadow-purple-500/30">
-              <div className="w-full h-full bg-[#0d0d15] rounded-[10px] flex items-center justify-center">
-                <Disc3 className="w-6 h-6 text-pink-400 animate-spin-slow" />
-              </div>
-            </div>
-            <div>
-              <h1 className="font-extrabold text-lg tracking-tight text-white">
-                BeatPulse <span className="text-gradient-neon">DJ</span>
-              </h1>
-              <p className="text-[11px] text-slate-400 font-medium">{ownerConfig.clubName}</p>
-            </div>
-          </div>
-
-          {/* Clean Status Badge for Customer */}
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-extrabold">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-            <span>CABINA EN VIVO</span>
-          </div>
-
-        </div>
-      </header>
-    );
-  }
-
-  // Admin Unlocked Mode (Displays full control tabs for DJ & Owner)
   return (
-    <header className="sticky top-0 z-50 glass-panel border-b border-purple-500/20 px-4 py-3">
-      <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-3">
+    <header className="sticky top-0 z-40 bg-[#08080c]/90 backdrop-blur-xl border-b border-white/10 px-4 py-3">
+      <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
         
-        {/* Brand logo */}
+        {/* Stealth Logo with Secret Tap Detector */}
         <div
           onClick={onSecretLogoTap}
-          className="flex items-center gap-3 cursor-pointer select-none"
+          className="flex items-center gap-3 cursor-pointer select-none group"
         >
-          <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 via-pink-500 to-cyan-400 p-[2px] shadow-lg shadow-purple-500/30">
-            <div className="w-full h-full bg-[#0d0d15] rounded-[10px] flex items-center justify-center">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-600 via-pink-500 to-amber-400 p-0.5 shadow-lg shadow-purple-600/30 group-hover:scale-105 transition-transform">
+            <div className="w-full h-full bg-black rounded-[14px] flex items-center justify-center">
               <Disc3 className="w-6 h-6 text-pink-400 animate-spin-slow" />
             </div>
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="font-extrabold text-xl tracking-tight text-white">
-                BeatPulse <span className="text-gradient-neon">DJ</span>
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-lg font-black tracking-tight text-white font-['Outfit']">
+                BEATPULSE
               </h1>
-              <span className="px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                MODO ADMIN
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-pink-500/20 text-pink-400 border border-pink-500/30 uppercase tracking-widest">
+                CLUB IBIZA
               </span>
             </div>
-            <p className="text-xs text-slate-400 font-medium">{ownerConfig.clubName}</p>
+            <p className="text-[10px] font-semibold text-slate-400">Pide tu música favorita en vivo</p>
           </div>
         </div>
 
-        {/* 3 Main User Role Navigation Tabs */}
-        <nav className="flex items-center gap-1 bg-[#12121e] p-1.5 rounded-2xl border border-white/5 shadow-inner overflow-x-auto max-w-full">
+        {/* Navigation Portal Tabs */}
+        <div className="flex items-center gap-1 bg-slate-900/80 p-1.5 rounded-2xl border border-white/10 overflow-x-auto">
+          
+          {/* Client Tab */}
           <button
             onClick={() => setActiveTab('client')}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
               activeTab === 'client'
                 ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-600/30'
-                : 'text-slate-400 hover:text-white hover:bg-white/5'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
             <Smartphone className="w-4 h-4" />
-            <span>1. Cliente (Móvil)</span>
+            <span className="hidden sm:inline">📱 Cliente</span>
           </button>
 
-          <button
-            onClick={() => setActiveTab('dj')}
-            className={`relative flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-              activeTab === 'dj'
-                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-600/30'
-                : 'text-slate-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <Disc3 className="w-4 h-4" />
-            <span>2. Cabina DJ</span>
-            {pendingCount > 0 && (
-              <span className="flex items-center justify-center w-5 h-5 text-[10px] font-black rounded-full bg-pink-500 text-white animate-bounce shadow-md shadow-pink-500/50">
-                {pendingCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('owner')}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-              activeTab === 'owner'
-                ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black shadow-lg shadow-amber-500/30'
-                : 'text-slate-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <Building className="w-4 h-4 text-amber-400" />
-            <span>3. Dueño Discoteca</span>
-          </button>
-
+          {/* Club Stage Screen Tab */}
           <button
             onClick={() => setActiveTab('stage')}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
               activeTab === 'stage'
                 ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-600/30'
-                : 'text-slate-400 hover:text-white hover:bg-white/5'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
             <Tv className="w-4 h-4" />
-            <span>Pantalla Club</span>
+            <span>🪩 Pantalla Club</span>
           </button>
 
-          <button
-            onClick={() => setActiveTab('bridge')}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-              activeTab === 'bridge'
-                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-600/30'
-                : 'text-slate-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <Cable className="w-4 h-4" />
-            <span>VirtualDJ Bridge</span>
-          </button>
-        </nav>
+          {/* DJ Booth Portal (Only when stealth unlocked or PIN entered) */}
+          {isStealthAdminUnlocked && (unlockedRole === 'dj' || unlockedRole === 'owner') && (
+            <button
+              onClick={() => setActiveTab('dj')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                activeTab === 'dj'
+                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-600/30 ring-2 ring-purple-400/50'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Disc3 className="w-4 h-4" />
+              <span>🎧 Cabina DJ</span>
+              {pendingCount > 0 && (
+                <span className="px-1.5 py-0.5 text-[10px] font-black rounded-full bg-pink-500 text-white animate-bounce">
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+          )}
 
-        {/* Total Earned Badge */}
-        <div className="hidden xl:flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-500/10 border border-amber-500/30 text-amber-300 font-bold text-xs">
-          <DollarSign className="w-4 h-4 text-amber-400" />
-          <span>Bruto Noche: ${totalEarnedCOP.toLocaleString('es-CO')} COP</span>
+          {/* Owner Portal (Strictly visible ONLY to Owner PIN 9999) */}
+          {isStealthAdminUnlocked && unlockedRole === 'owner' && (
+            <button
+              onClick={() => setActiveTab('owner')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                activeTab === 'owner'
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-lg shadow-amber-500/30'
+                  : 'text-amber-400/80 hover:text-amber-300'
+              }`}
+            >
+              <DollarSign className="w-4 h-4" />
+              <span>👑 Panel Dueño</span>
+            </button>
+          )}
+
+          {/* VirtualDJ Bridge Tab (Visible ONLY to Owner PIN 9999) */}
+          {isStealthAdminUnlocked && unlockedRole === 'owner' && (
+            <button
+              onClick={() => setActiveTab('bridge')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                activeTab === 'bridge'
+                  ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-600/30'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Cpu className="w-4 h-4" />
+              <span className="hidden md:inline">🔌 VirtualDJ</span>
+            </button>
+          )}
+
         </div>
 
       </div>

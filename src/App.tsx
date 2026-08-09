@@ -26,10 +26,17 @@ export function App() {
   const urlRole = queryParams.get('role') as 'client' | 'dj' | 'owner' | 'stage' | 'bridge' | null;
   const urlAccessSecret = queryParams.get('access') || queryParams.get('admin');
 
-  // Persistent stealth admin unlock state
+  // Persistent stealth admin unlock state & role
   const [isStealthAdminUnlocked, setIsStealthAdminUnlocked] = useState<boolean>(() => {
     const savedUnlocked = localStorage.getItem('beatpulse_stealth_unlocked');
     return Boolean(savedUnlocked === 'true' || urlAccessSecret || urlRole === 'dj' || urlRole === 'owner' || urlRole === 'bridge');
+  });
+
+  const [unlockedRole, setUnlockedRole] = useState<'dj' | 'owner' | null>(() => {
+    const savedRole = localStorage.getItem('beatpulse_unlocked_role') as 'dj' | 'owner' | null;
+    if (urlRole === 'owner') return 'owner';
+    if (urlRole === 'dj') return 'dj';
+    return savedRole || 'dj';
   });
 
   // Persistent active portal tab state
@@ -109,6 +116,12 @@ export function App() {
     localStorage.setItem('beatpulse_stealth_unlocked', isStealthAdminUnlocked ? 'true' : 'false');
   }, [isStealthAdminUnlocked]);
 
+  useEffect(() => {
+    if (unlockedRole) {
+      localStorage.setItem('beatpulse_unlocked_role', unlockedRole);
+    }
+  }, [unlockedRole]);
+
   // Save owner config changes persistently
   useEffect(() => {
     localStorage.setItem('beatpulse_owner_config', JSON.stringify(ownerConfig));
@@ -142,7 +155,7 @@ export function App() {
     }
 
     if (tab === 'owner') {
-      if (!isStealthAdminUnlocked) {
+      if (!isStealthAdminUnlocked || unlockedRole !== 'owner') {
         setPinPromptRole('owner');
         setEnteredPin('');
         setPinError('');
@@ -154,14 +167,21 @@ export function App() {
   };
 
   const handleVerifyPin = () => {
-    if (enteredPin === DJ_PIN || enteredPin === STAFF_PIN || enteredPin === OWNER_PIN) {
+    if (enteredPin === OWNER_PIN) {
       soundFx.playCoinChime();
       setIsStealthAdminUnlocked(true);
-      setActiveTab(enteredPin === OWNER_PIN ? 'owner' : 'dj');
+      setUnlockedRole('owner');
+      setActiveTab('owner');
       setPinPromptRole(null);
-      if (enteredPin === OWNER_PIN && !ownerConfig.hasAcceptedTerms) {
+      if (!ownerConfig.hasAcceptedTerms) {
         setIsTermsModalOpen(true);
       }
+    } else if (enteredPin === DJ_PIN || enteredPin === STAFF_PIN) {
+      soundFx.playCoinChime();
+      setIsStealthAdminUnlocked(true);
+      setUnlockedRole('dj');
+      setActiveTab('dj');
+      setPinPromptRole(null);
     } else {
       setPinError('Clave incorrecta');
       soundFx.playScratch();
@@ -270,6 +290,7 @@ export function App() {
         totalEarnedCOP={totalEarnedCOP}
         pendingCount={pendingCount}
         isStealthAdminUnlocked={isStealthAdminUnlocked}
+        unlockedRole={unlockedRole}
         onSecretLogoTap={handleSecretLogoTap}
       />
 
@@ -295,7 +316,7 @@ export function App() {
           />
         )}
 
-        {activeTab === 'owner' && (
+        {activeTab === 'owner' && unlockedRole === 'owner' && (
           <OwnerDashboardView
             ownerConfig={ownerConfig}
             onUpdateOwnerConfig={handleUpdateOwnerConfig}
@@ -310,7 +331,7 @@ export function App() {
           </div>
         )}
 
-        {activeTab === 'bridge' && (
+        {activeTab === 'bridge' && unlockedRole === 'owner' && (
           <VirtualDJBridgeView
             vdjConfig={vdjConfig}
             requests={requests}
