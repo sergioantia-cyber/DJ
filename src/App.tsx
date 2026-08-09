@@ -185,7 +185,7 @@ export function App() {
         setIsTermsModalOpen(true);
       }
     } else {
-      setPinError('Clave de acceso incorrecta (Usar: 0000, 1234 o 9999)');
+      setPinError('Clave incorrecta');
       soundFx.playScratch();
     }
   };
@@ -335,35 +335,22 @@ export function App() {
         )}
       </main>
 
-      {/* PIN Security Modal for Secret Access */}
+      {/* PIN Security Modal for Secret Access (Stealth Minimalist) */}
       {pinPromptRole && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
-          <div className="w-full max-w-sm glass-panel-neon rounded-3xl p-6 border border-purple-500/40 space-y-4 text-center">
+          <div className="w-full max-w-sm glass-panel-neon rounded-3xl p-6 border border-purple-500/40 space-y-5 text-center">
             
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <div className="flex items-center gap-2 text-xs font-bold text-pink-400 uppercase">
+              <div className="flex items-center gap-2 text-xs font-bold text-pink-400 uppercase tracking-widest">
                 <KeyRound className="w-4 h-4" />
-                <span>Acceso Restringido Staff</span>
+                <span>ACCESO RESTRINGIDO</span>
               </div>
               <button onClick={() => setPinPromptRole(null)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-1">
-              <h3 className="text-lg font-extrabold text-white">
-                {pinPromptRole === 'admin'
-                  ? 'Panel de Control Staff / DJ / Dueño'
-                  : pinPromptRole === 'dj'
-                  ? 'Acceso a Cabina DJ'
-                  : 'Panel de Administración del Dueño'}
-              </h3>
-              <p className="text-xs text-slate-300">
-                Ingresa la clave de acceso (DJ/Staff: <strong>0000</strong> o <strong>1234</strong> • Dueño: <strong>9999</strong>)
-              </p>
-            </div>
-
-            <div>
+            <div className="pt-2">
               <input
                 type="password"
                 maxLength={6}
@@ -371,7 +358,7 @@ export function App() {
                 onChange={(e) => setEnteredPin(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleVerifyPin()}
                 placeholder="****"
-                className="w-full text-center tracking-[0.5em] font-mono text-2xl font-black py-3 rounded-2xl bg-slate-900 border border-white/10 text-white focus:border-pink-500 outline-none"
+                className="w-full text-center tracking-[0.5em] font-mono text-2xl font-black py-3.5 rounded-2xl bg-slate-900 border border-white/10 text-white focus:border-pink-500 outline-none shadow-inner"
                 autoFocus
               />
               {pinError && <p className="text-xs text-rose-400 font-bold mt-2">{pinError}</p>}
@@ -379,7 +366,7 @@ export function App() {
 
             <button
               onClick={handleVerifyPin}
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 text-white font-extrabold text-xs shadow-lg shadow-purple-600/40"
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 text-white font-extrabold text-xs shadow-lg shadow-purple-600/40 active:scale-95 transition-all"
             >
               Ingresar al Portal
             </button>
