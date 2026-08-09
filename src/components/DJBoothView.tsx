@@ -39,7 +39,6 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
   onUpdateRequestStatus,
   onToggleAutoAccept,
 }) => {
-  // Default to showing 'all' or 'pending' requests
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [rejectionModalReqId, setRejectionModalReqId] = useState<string | null>(null);
 
@@ -52,8 +51,8 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
 
   const pendingRequests = requests.filter((r) => r.status === 'pending');
   const validRequests = requests.filter((r) => r.status !== 'rejected');
-  const totalGrossCOP = validRequests.reduce((sum, r) => sum + r.totalPaidCOP, 0);
-  const djEarnedCOP = validRequests.reduce((sum, r) => sum + r.djShareCOP, 0);
+  const totalGrossCOP = validRequests.reduce((sum, r) => sum + (r.totalPaidCOP || 0), 0);
+  const djEarnedCOP = validRequests.reduce((sum, r) => sum + (r.djShareCOP || 0), 0);
 
   const filteredRequests = requests.filter((r) => {
     if (filterStatus === 'all') return true;
@@ -73,7 +72,7 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
       audioRef.current.pause();
     }
 
-    if (req.song.previewUrl) {
+    if (req.song?.previewUrl) {
       const audio = new Audio(req.song.previewUrl);
       audioRef.current = audio;
       audio.play();
@@ -190,10 +189,10 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
                   Reproductor Directo a Altavoces / Bluetooth
                 </span>
                 <h4 className="font-extrabold text-white text-sm truncate">
-                  {currentPlayingReq ? currentPlayingReq.song.title : 'Esperando primera canción...'}
+                  {currentPlayingReq ? currentPlayingReq.song?.title : 'Esperando primera canción...'}
                 </h4>
                 <p className="text-xs text-slate-400 truncate">
-                  {currentPlayingReq ? `${currentPlayingReq.song.artist} • Pedido por ${currentPlayingReq.userName}` : 'Conecta este teléfono/tablet al AUX o Bluetooth del club'}
+                  {currentPlayingReq ? `${currentPlayingReq.song?.artist} • Pedido por ${currentPlayingReq.userName}` : 'Conecta este teléfono/tablet al AUX o Bluetooth del club'}
                 </p>
               </div>
             </div>
@@ -302,7 +301,7 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
         </div>
       </div>
 
-      {/* Main Request Queue Deck Header (Renamed to "Cola de Pedidos") */}
+      {/* Main Request Queue Deck Header */}
       <div className="glass-panel-neon rounded-3xl p-6 border border-purple-500/30 space-y-6">
         
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -358,19 +357,19 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
                 }`}
               >
                 <div className="flex items-center gap-4 min-w-0">
-                  <img src={req.song.albumCover} alt={req.song.title} className="w-16 h-16 rounded-xl object-cover shadow-md flex-shrink-0" />
+                  <img src={req.song?.albumCover || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80'} alt={req.song?.title || 'Song'} className="w-16 h-16 rounded-xl object-cover shadow-md flex-shrink-0" />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                        {req.priority.badge}
+                        {req.priority?.badge || 'Standard'}
                       </span>
                       <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
-                        +${req.totalPaidCOP.toLocaleString('es-CO')} COP ({req.paymentMethod.toUpperCase()})
+                        +${(req.totalPaidCOP || 0).toLocaleString('es-CO')} COP ({(req.paymentMethod || 'NEQUI').toUpperCase()})
                       </span>
                     </div>
 
-                    <h4 className="font-bold text-white text-base truncate mt-1">{req.song.title}</h4>
-                    <p className="text-xs text-slate-400 truncate">{req.song.artist} • Pedido por {req.userName} ({req.tableNumber})</p>
+                    <h4 className="font-bold text-white text-base truncate mt-1">{req.song?.title || 'Canción'}</h4>
+                    <p className="text-xs text-slate-400 truncate">{req.song?.artist || 'Artista'} • Pedido por {req.userName} ({req.tableNumber})</p>
 
                     {req.dedicatedMessage && (
                       <p className="mt-1 text-xs text-pink-300 bg-pink-500/10 px-2.5 py-1 rounded-lg border border-pink-500/20 italic">
@@ -384,7 +383,7 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
                   
                   {/* Spotify quick link */}
                   <button
-                    onClick={() => openInSpotifySearch(req.song.title, req.song.artist)}
+                    onClick={() => openInSpotifySearch(req.song?.title || '', req.song?.artist || '')}
                     className="px-3 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white font-bold text-xs flex items-center gap-1 border border-emerald-500/30"
                     title="Abrir en Spotify"
                   >
