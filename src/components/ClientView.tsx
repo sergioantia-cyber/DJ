@@ -16,11 +16,13 @@ import {
   X,
   Radio,
   Globe,
-  Loader2
+  Loader2,
+  Tv
 } from 'lucide-react';
 import { Song, PriorityOption, Genre, SongRequest, OwnerConfig, PaymentMethodType } from '../types';
 import { INITIAL_PRIORITY_OPTIONS } from '../data/mockDatabase';
 import { NequiBancolombiaPaymentModal } from './NequiBancolombiaPaymentModal';
+import { StageScreenView } from './StageScreenView';
 import { searchLiveWebMusic } from '../services/musicSearchService';
 import { soundFx } from '../services/soundEffects';
 
@@ -57,7 +59,7 @@ export const ClientView: React.FC<ClientViewProps> = ({
 
   // Nequi / Bancolombia Payment Modal Trigger
   const [isNequiModalOpen, setIsNequiModalOpen] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'catalog' | 'my_requests'>('catalog');
+  const [activeTab, setActiveTab] = useState<'catalog' | 'my_requests' | 'stage_screen'>('catalog');
 
   const genresList = ['Todos', 'Reggaeton', 'Electro / House', 'Techno & EDM', 'Salsa & Bachata', 'Trap & Urban', 'Pop Hits'];
 
@@ -99,7 +101,6 @@ export const ClientView: React.FC<ClientViewProps> = ({
   };
 
   const handleOpenOrderModal = (song: Song) => {
-    // Stop audio preview if playing
     if (activeAudioElement) {
       activeAudioElement.pause();
       setActiveAudioElement(null);
@@ -173,18 +174,18 @@ export const ClientView: React.FC<ClientViewProps> = ({
               <QrCode className="w-4 h-4" /> Conectado a {ownerConfig.clubName}
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Buscador de Música <span className="text-gradient-neon">en Tiempo Real</span>
+              Pide tu música con <span className="text-gradient-neon">Nequi o Bancolombia</span>
             </h2>
             <p className="text-sm text-slate-300 mt-1">
-              Busca cualquier tema en vivo en la Web o catálogo del club y pídela al DJ con Nequi o Bancolombia 🪩
+              Escanea el QR en tu mesa, haz la transferencia y mira tu dedicatoria en la pantalla del club 🪩
             </p>
           </div>
 
-          {/* Catalog vs My Requests Switch */}
-          <div className="flex items-center bg-black/40 p-1.5 rounded-2xl border border-white/10 w-full sm:w-auto">
+          {/* Customer Tabs Switcher: Catalog vs My Requests vs Stage Screen */}
+          <div className="flex items-center bg-black/40 p-1.5 rounded-2xl border border-white/10 w-full sm:w-auto overflow-x-auto">
             <button
               onClick={() => setActiveTab('catalog')}
-              className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              className={`flex-1 sm:flex-initial px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
                 activeTab === 'catalog'
                   ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40'
                   : 'text-slate-400 hover:text-white'
@@ -194,7 +195,7 @@ export const ClientView: React.FC<ClientViewProps> = ({
             </button>
             <button
               onClick={() => setActiveTab('my_requests')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
                 activeTab === 'my_requests'
                   ? 'bg-pink-600 text-white shadow-lg shadow-pink-600/40'
                   : 'text-slate-400 hover:text-white'
@@ -208,11 +209,23 @@ export const ClientView: React.FC<ClientViewProps> = ({
                 </span>
               )}
             </button>
+
+            <button
+              onClick={() => setActiveTab('stage_screen')}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                activeTab === 'stage_screen'
+                  ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-600/40'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Tv className="w-3.5 h-3.5 text-cyan-300" />
+              <span>🪩 Pantalla Club</span>
+            </button>
           </div>
         </div>
       </div>
 
-      {activeTab === 'catalog' ? (
+      {activeTab === 'catalog' && (
         <>
           {/* Search bar & Live Web API indicator */}
           <div className="space-y-4">
@@ -275,7 +288,6 @@ export const ClientView: React.FC<ClientViewProps> = ({
                   key={song.id}
                   className="glass-panel rounded-2xl p-4 flex items-center justify-between gap-4 glass-card-hover border border-white/5 group"
                 >
-                  {/* Album Cover with Live Audio Preview Button */}
                   <div className="relative flex-shrink-0">
                     <img
                       src={song.albumCover}
@@ -337,7 +349,9 @@ export const ClientView: React.FC<ClientViewProps> = ({
             </div>
           )}
         </>
-      ) : (
+      )}
+
+      {activeTab === 'my_requests' && (
         /* My Requests Radar */
         <div className="space-y-4">
           <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -367,6 +381,21 @@ export const ClientView: React.FC<ClientViewProps> = ({
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {activeTab === 'stage_screen' && (
+        /* Embedded Live Stage Screen Visualizer for Customers */
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <Tv className="w-5 h-5 text-cyan-400 animate-pulse" />
+              <span>Pantalla en Vivo del Club</span>
+            </h3>
+            <span className="text-xs text-slate-400">Transmisión en tiempo real desde la cabina</span>
+          </div>
+
+          <StageScreenView requests={userRequests.length > 0 ? userRequests : []} />
         </div>
       )}
 
