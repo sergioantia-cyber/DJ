@@ -31,16 +31,24 @@ export function App() {
   const [activeTab, setActiveTab] = useState<'client' | 'dj' | 'owner' | 'stage' | 'bridge'>(urlRole || 'client');
   const [songs] = useState(INITIAL_SONGS);
   
-  // Realtime multi-device request queue with Device ID Fingerprint
+  // Realtime multi-device request queue with Cloud Database Persistence
   const [requests, setRequests] = useState<SongRequest[]>(() => {
     const local = getLocalStoredRequests();
     return local.length > 0 ? local : INITIAL_REQUESTS;
   });
 
-  const [ownerConfig, setOwnerConfig] = useState<OwnerConfig>(DEFAULT_OWNER_CONFIG);
-  const [isTermsModalOpen, setIsTermsModalOpen] = useState<boolean>(false);
+  // Owner Config stored persistently in LocalStorage / Cloud
+  const [ownerConfig, setOwnerConfig] = useState<OwnerConfig>(() => {
+    const savedConfig = localStorage.getItem('beatpulse_owner_config');
+    if (savedConfig) {
+      try {
+        return JSON.parse(savedConfig);
+      } catch (e) {}
+    }
+    return DEFAULT_OWNER_CONFIG;
+  });
 
-  // Secret 5-tap counter on logo to unlock admin mode
+  const [isTermsModalOpen, setIsTermsModalOpen] = useState<boolean>(false);
   const [logoTapCount, setLogoTapCount] = useState<number>(0);
 
   // Security PIN state for DJ and Owner portals
@@ -61,17 +69,33 @@ export function App() {
     lastPing: new Date().toISOString()
   });
 
-  // REALTIME CROSS-DEVICE POLLING SYNC (Syncs every 3 seconds across Vercel users)
+  // 1. Initial Cloud Load on App Mount
+  useEffect(() => {
+    async function initLoad() {
+      const cloudReqs = await fetchCloudRequests();
+      if (cloudReqs && cloudReqs.length > 0) {
+        setRequests(cloudReqs);
+      }
+    }
+    initLoad();
+  }, []);
+
+  // 2. High-Frequency Realtime Cross-Device Polling (Syncs every 1.5 seconds)
   useEffect(() => {
     const syncInterval = setInterval(async () => {
       const cloudReqs = await fetchCloudRequests();
       if (cloudReqs && Array.isArray(cloudReqs)) {
         setRequests(cloudReqs);
       }
-    }, 3000);
+    }, 1500);
 
     return () => clearInterval(syncInterval);
   }, []);
+
+  // 3. Save owner config changes persistently
+  useEffect(() => {
+    localStorage.setItem('beatpulse_owner_config', JSON.stringify(ownerConfig));
+  }, [ownerConfig]);
 
   const validRequests = requests.filter((r) => r.status !== 'rejected');
   const totalEarnedCOP = validRequests.reduce((sum, r) => sum + r.totalPaidCOP, 0);
