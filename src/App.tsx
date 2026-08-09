@@ -15,7 +15,8 @@ import {
   fetchCloudRequests,
   saveCloudRequests,
   getLocalStoredRequests,
-  getOrCreateDeviceId
+  getOrCreateDeviceId,
+  subscribeToRealtimeChanges
 } from './services/realtimeSyncService';
 
 export function App() {
@@ -29,7 +30,7 @@ export function App() {
     return Boolean(savedUnlocked === 'true' || urlAccessSecret || urlRole === 'dj' || urlRole === 'owner' || urlRole === 'bridge');
   });
 
-  // Persistent active portal tab state (remembers if user is DJ / Owner on page refresh)
+  // Persistent active portal tab state
   const [activeTab, setActiveTab] = useState<'client' | 'dj' | 'owner' | 'stage' | 'bridge'>(() => {
     const savedTab = localStorage.getItem('beatpulse_active_tab') as 'client' | 'dj' | 'owner' | 'stage' | 'bridge' | null;
     return urlRole || savedTab || 'client';
@@ -37,13 +38,12 @@ export function App() {
 
   const [songs] = useState(INITIAL_SONGS);
   
-  // Realtime multi-device request queue with Cloud Database Persistence
+  // Realtime multi-device request queue with BroadcastChannel & Persistent LocalStorage
   const [requests, setRequests] = useState<SongRequest[]>(() => {
-    const local = getLocalStoredRequests();
-    return local.length > 0 ? local : INITIAL_REQUESTS;
+    return getLocalStoredRequests();
   });
 
-  // Owner Config stored persistently in LocalStorage / Cloud
+  // Owner Config stored persistently
   const [ownerConfig, setOwnerConfig] = useState<OwnerConfig>(() => {
     const savedConfig = localStorage.getItem('beatpulse_owner_config');
     if (savedConfig) {
@@ -75,6 +75,14 @@ export function App() {
     lastPing: new Date().toISOString()
   });
 
+  // Realtime subscription listener across tabs/windows
+  useEffect(() => {
+    const unsubscribe = subscribeToRealtimeChanges((updatedReqs) => {
+      setRequests(updatedReqs);
+    });
+    return () => unsubscribe();
+  }, []);
+
   // Save activeTab & stealth status persistently to localStorage
   useEffect(() => {
     localStorage.setItem('beatpulse_active_tab', activeTab);
@@ -84,30 +92,7 @@ export function App() {
     localStorage.setItem('beatpulse_stealth_unlocked', isStealthAdminUnlocked ? 'true' : 'false');
   }, [isStealthAdminUnlocked]);
 
-  // 1. Initial Cloud Load on App Mount
-  useEffect(() => {
-    async function initLoad() {
-      const cloudReqs = await fetchCloudRequests();
-      if (cloudReqs && cloudReqs.length > 0) {
-        setRequests(cloudReqs);
-      }
-    }
-    initLoad();
-  }, []);
-
-  // 2. High-Frequency Realtime Cross-Device Polling (Syncs every 1.5 seconds)
-  useEffect(() => {
-    const syncInterval = setInterval(async () => {
-      const cloudReqs = await fetchCloudRequests();
-      if (cloudReqs && Array.isArray(cloudReqs)) {
-        setRequests(cloudReqs);
-      }
-    }, 1500);
-
-    return () => clearInterval(syncInterval);
-  }, []);
-
-  // 3. Save owner config changes persistently
+  // Save owner config changes persistently
   useEffect(() => {
     localStorage.setItem('beatpulse_owner_config', JSON.stringify(ownerConfig));
   }, [ownerConfig]);
@@ -214,13 +199,12 @@ export function App() {
 
     const deviceId = getOrCreateDeviceId();
 
-    // Requests start as PENDING for DJ verification!
     const newRequest: SongRequest = {
       ...newReqData,
       id: `req-${Date.now()}`,
       deviceId,
       createdAt: new Date().toISOString(),
-      status: 'pending', // Shows ONLY in DJ Booth first!
+      status: 'pending', // Shows in DJ Booth first!
       platformFeeCOP,
       djShareCOP,
       clubShareCOP,
