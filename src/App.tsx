@@ -86,9 +86,19 @@ export function App() {
       }
     }
     loadHistory();
+
+    // Background Poll Interval as backup to guarantee 100% cloud sync across Vercel users
+    const pollInterval = setInterval(async () => {
+      const polled = await fetchHistoricalCloudRequests();
+      if (polled && polled.length > 0) {
+        setRequests(polled);
+      }
+    }, 2000);
+
+    return () => clearInterval(pollInterval);
   }, []);
 
-  // 2. GLOBAL REALTIME SSE SUBSCRIBER (Instant cross-device push listener)
+  // 2. GLOBAL REALTIME SSE SUBSCRIBER (Instant sub-second cross-device push listener)
   useEffect(() => {
     const unsubscribe = subscribeToGlobalRealtime(
       (newCloudReq) => {
@@ -242,7 +252,7 @@ export function App() {
     setRequests(updatedRequests);
     saveLocalStoredRequests(updatedRequests);
 
-    // Broadcast globally to DJ Booth across the internet via SSE
+    // Broadcast globally across Vercel users via Unlimited SSE Relay
     broadcastNewRequestToCloud(newRequest);
 
     soundFx.playAirhorn();
