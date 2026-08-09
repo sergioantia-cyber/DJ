@@ -17,7 +17,7 @@ const SUPABASE_API_KEY = decodeKey('c2Jfc2VjcmV0X1lTaUtyeWZPUi1vdEtwcVEuanlPM1Ff
 const PUBLIC_STORAGE_URL = `${SUPABASE_PROJECT_URL}/storage/v1/object/public/dj_requests/master_queue.json`;
 const UPLOAD_STORAGE_URL = `${SUPABASE_PROJECT_URL}/storage/v1/object/dj_requests/master_queue.json`;
 
-const PRIMARY_STORAGE_KEY = 'beatpulse_supabase_requests_master_v7';
+const PRIMARY_STORAGE_KEY = 'beatpulse_supabase_requests_master_v8';
 const DEVICE_ID_KEY = 'beatpulse_user_device_id';
 
 const broadcastChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('beatpulse_supabase_channel') : null;
@@ -127,13 +127,47 @@ export async function fetchCloudRequests(): Promise<SongRequest[]> {
   return localList;
 }
 
+// Atomic Cloud Upload: Fetches current cloud list first, appends new item, and uploads combined array
 export async function saveCloudRequestItem(newReq: SongRequest): Promise<boolean> {
   const sanitized = sanitizeRequest(newReq);
   if (!sanitized) return false;
 
+  // 1. Save locally instantly
   const currentLocal = getLocalStoredRequests();
-  const updatedLocal = mergeRequests(currentLocal, [sanitized]);
-  return saveCloudRequests(updatedLocal);
+  const localMerged = mergeRequests(currentLocal, [sanitized]);
+  saveLocalStoredRequests(localMerged);
+
+  // 2. Fetch current remote cloud list
+  let remoteList: SongRequest[] = [];
+  try {
+    const res = await fetch(`${PUBLIC_STORAGE_URL}?t=${Date.now()}`, { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.requests)) {
+        remoteList = data.requests.map(sanitizeRequest).filter((r): r is SongRequest => r !== null);
+      }
+    }
+  } catch (e) {}
+
+  // 3. Merge new request into remote list
+  const combined = mergeRequests(remoteList, [sanitized]);
+
+  // 4. Upload combined master array back to Supabase Cloud Storage
+  try {
+    const res = await fetch(UPLOAD_STORAGE_URL, {
+      method: 'PUT',
+      headers: {
+        'apikey': SUPABASE_API_KEY,
+        'Authorization': `Bearer ${SUPABASE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ requests: combined }),
+    });
+
+    return res.ok;
+  } catch (e) {
+    return false;
+  }
 }
 
 export async function saveCloudRequests(requests: SongRequest[]): Promise<boolean> {
