@@ -17,12 +17,12 @@ const SUPABASE_API_KEY = decodeKey('c2Jfc2VjcmV0X1lTaUtyeWZPUi1vdEtwcVEuanlPM1Ff
 const PUBLIC_STORAGE_URL = `${SUPABASE_PROJECT_URL}/storage/v1/object/public/dj_requests/master_queue.json`;
 const UPLOAD_STORAGE_URL = `${SUPABASE_PROJECT_URL}/storage/v1/object/dj_requests/master_queue.json`;
 
-const PRIMARY_STORAGE_KEY = 'beatpulse_supabase_requests_master_v6';
+const PRIMARY_STORAGE_KEY = 'beatpulse_supabase_requests_master_v7';
 const DEVICE_ID_KEY = 'beatpulse_user_device_id';
 
 const broadcastChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('beatpulse_supabase_channel') : null;
 
-// Defensive sanitizer for SongRequest objects to prevent React crash errors
+// Pure JSON Sanitizer (removes any undefined properties so JSON.stringify never produces bad requests)
 export function sanitizeRequest(req: any): SongRequest | null {
   if (!req || typeof req !== 'object' || !req.id) return null;
 
@@ -30,38 +30,38 @@ export function sanitizeRequest(req: any): SongRequest | null {
 
   return {
     id: String(req.id),
-    deviceId: req.deviceId || 'anon',
-    userName: req.userName || 'Cliente',
-    tableNumber: req.tableNumber || 'Mesa General',
-    status: req.status || 'pending',
-    createdAt: req.createdAt || new Date().toISOString(),
+    deviceId: String(req.deviceId || 'anon'),
+    userName: String(req.userName || 'Cliente'),
+    tableNumber: String(req.tableNumber || 'Mesa General'),
+    status: (req.status || 'pending') as RequestStatus,
+    createdAt: String(req.createdAt || new Date().toISOString()),
     tipAmountCOP: Number(req.tipAmountCOP || 0),
     totalPaidCOP: Number(req.totalPaidCOP || 10000),
-    paymentMethod: req.paymentMethod || 'nequi_qr',
-    dedicatedMessage: req.dedicatedMessage || undefined,
+    paymentMethod: String(req.paymentMethod || 'nequi_qr'),
+    dedicatedMessage: req.dedicatedMessage ? String(req.dedicatedMessage) : '',
     platformFeeCOP: Number(req.platformFeeCOP || 2000),
     djShareCOP: Number(req.djShareCOP || 1000),
     clubShareCOP: Number(req.clubShareCOP || 7000),
     song: {
-      id: req.song?.id || `song-${Date.now()}`,
-      title: req.song?.title || 'Canción Seleccionada',
-      artist: req.song?.artist || 'Artista',
-      albumCover: req.song?.albumCover || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80',
-      genre: req.song?.genre || 'Reggaeton',
-      bpm: req.song?.bpm || 120,
-      duration: req.song?.duration || '3:30',
-      energyLevel: req.song?.energyLevel || 9,
-      previewUrl: req.song?.previewUrl || undefined,
+      id: String(req.song?.id || `song-${Date.now()}`),
+      title: String(req.song?.title || 'Canción Seleccionada'),
+      artist: String(req.song?.artist || 'Artista'),
+      albumCover: String(req.song?.albumCover || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80'),
+      genre: String(req.song?.genre || 'Reggaeton'),
+      bpm: Number(req.song?.bpm || 120),
+      duration: String(req.song?.duration || '3:30'),
+      energyLevel: Number(req.song?.energyLevel || 9),
+      previewUrl: req.song?.previewUrl ? String(req.song.previewUrl) : '',
     },
     priority: {
-      id: req.priority?.id || defaultPriority.id,
-      name: req.priority?.name || defaultPriority.name,
-      tagline: req.priority?.tagline || defaultPriority.tagline,
+      id: String(req.priority?.id || defaultPriority.id),
+      name: String(req.priority?.name || defaultPriority.name),
+      tagline: String(req.priority?.tagline || defaultPriority.tagline),
       priceCOP: Number(req.priority?.priceCOP || defaultPriority.priceCOP),
       estimatedWaitMinutes: Number(req.priority?.estimatedWaitMinutes || defaultPriority.estimatedWaitMinutes),
-      color: req.priority?.color || defaultPriority.color,
-      badge: req.priority?.badge || defaultPriority.badge,
-      iconName: req.priority?.iconName || defaultPriority.iconName,
+      color: String(req.priority?.color || defaultPriority.color),
+      badge: String(req.priority?.badge || defaultPriority.badge),
+      iconName: String(req.priority?.iconName || defaultPriority.iconName),
     },
   };
 }
@@ -107,7 +107,7 @@ export function mergeRequests(local: SongRequest[], remote: SongRequest[]): Song
   );
 }
 
-// Fetch master requests queue cleanly from Supabase Storage JSON (100% HTTP 200 OK, 0 Auth Errors)
+// Fetch master requests queue cleanly from Supabase Storage JSON
 export async function fetchCloudRequests(): Promise<SongRequest[]> {
   const localList = getLocalStoredRequests();
 
@@ -127,29 +127,13 @@ export async function fetchCloudRequests(): Promise<SongRequest[]> {
   return localList;
 }
 
-// Upload updated requests queue safely to Supabase Cloud using HTTP PUT
 export async function saveCloudRequestItem(newReq: SongRequest): Promise<boolean> {
   const sanitized = sanitizeRequest(newReq);
   if (!sanitized) return false;
 
   const currentLocal = getLocalStoredRequests();
   const updatedLocal = mergeRequests(currentLocal, [sanitized]);
-  saveLocalStoredRequests(updatedLocal);
-
-  try {
-    const res = await fetch(UPLOAD_STORAGE_URL, {
-      method: 'PUT',
-      headers: {
-        'apikey': SUPABASE_API_KEY,
-        'Authorization': `Bearer ${SUPABASE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ requests: updatedLocal }),
-    });
-    return res.ok;
-  } catch (e) {
-    return false;
-  }
+  return saveCloudRequests(updatedLocal);
 }
 
 export async function saveCloudRequests(requests: SongRequest[]): Promise<boolean> {

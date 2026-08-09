@@ -1,39 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import {
   Search,
-  Sparkles,
   Flame,
-  Clock,
   Zap,
+  Clock,
   Music,
-  QrCode,
-  Smartphone,
-  CreditCard,
+  CheckCircle2,
+  DollarSign,
+  Heart,
   MessageSquare,
-  TrendingUp,
-  X,
+  Sparkles,
+  QrCode,
   Radio,
-  Globe,
-  Loader2,
-  Tv,
-  PhoneCall,
-  Calendar,
+  ExternalLink,
+  ChevronRight,
   ShieldCheck,
-  CheckCircle2
+  Smartphone,
+  RefreshCw,
+  Send
 } from 'lucide-react';
-import { Song, PriorityOption, Genre, SongRequest, OwnerConfig, PaymentMethodType } from '../types';
+import { Song, SongRequest, OwnerConfig, PriorityOption } from '../types';
 import { INITIAL_PRIORITY_OPTIONS } from '../data/mockDatabase';
-import { NequiBancolombiaPaymentModal } from './NequiBancolombiaPaymentModal';
-import { StageScreenView } from './StageScreenView';
-import { searchLiveWebMusic, fetchDefaultTopClubHits } from '../services/musicSearchService';
-import { getOrCreateDeviceId } from '../services/realtimeSyncService';
 import { soundFx } from '../services/soundEffects';
+import { getOrCreateDeviceId } from '../services/realtimeSyncService';
 
 interface ClientViewProps {
   songs: Song[];
   userRequests: SongRequest[];
   ownerConfig: OwnerConfig;
-  onSubmitRequest: (newReq: Omit<SongRequest, 'id' | 'createdAt' | 'status' | 'platformFeeCOP' | 'djShareCOP' | 'clubShareCOP'>) => void;
+  onSubmitRequest: (
+    newReq: Omit<SongRequest, 'id' | 'createdAt' | 'status' | 'platformFeeCOP' | 'djShareCOP' | 'clubShareCOP'>
+  ) => void;
 }
 
 export const ClientView: React.FC<ClientViewProps> = ({
@@ -42,333 +39,460 @@ export const ClientView: React.FC<ClientViewProps> = ({
   ownerConfig,
   onSubmitRequest,
 }) => {
-  const [currentDeviceId] = useState<string>(() => getOrCreateDeviceId());
+  const deviceId = getOrCreateDeviceId();
 
-  const [selectedGenre, setSelectedGenre] = useState<string>('Todos');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [searchResults, setSearchResults] = useState<Song[]>([]);
-  const [defaultHits, setDefaultHits] = useState<Song[]>([]);
-  const [isSearchingWeb, setIsSearchingWeb] = useState<boolean>(false);
-
+  const [activeSubTab, setActiveSubTab] = useState<'request' | 'history'>('request');
+  const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
+  const [selectedPriority, setSelectedPriority] = useState<PriorityOption>(INITIAL_PRIORITY_OPTIONS[0]);
 
-  // Form states for request modal
-  const [userName, setUserName] = useState<string>('Alex M.');
-  const [tableNumber, setTableNumber] = useState<string>('Mesa 12 (Zona VIP)');
-  const [selectedPriority, setSelectedPriority] = useState<PriorityOption>(INITIAL_PRIORITY_OPTIONS[1]);
-  const [extraTipCOP, setExtraTipCOP] = useState<number>(5000);
+  // Form Fields
+  const [userName, setUserName] = useState<string>('');
+  const [tableNumber, setTableNumber] = useState<string>('');
   const [dedicatedMessage, setDedicatedMessage] = useState<string>('');
+  const [tipAmountCOP, setTipAmountCOP] = useState<number>(0);
+  const [paymentMethod, setPaymentMethod] = useState<'nequi_qr' | 'bancolombia_qr'>('nequi_qr');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submitSuccessMsg, setSubmitSuccessMsg] = useState<string>('');
 
-  // Nequi / Bancolombia Payment Modal Trigger
-  const [isNequiModalOpen, setIsNequiModalOpen] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'catalog' | 'my_requests' | 'stage_screen'>('catalog');
+  // iTunes API Search Results State
+  const [searchResults, setSearchResults] = useState<Song[]>(songs);
+  const [isSearchingiTunes, setIsSearchingiTunes] = useState<boolean>(false);
 
-  const genresList = ['Todos', 'Reggaeton', 'Electro / House', 'Techno & EDM', 'Salsa & Bachata', 'Trap & Urban', 'Pop Hits'];
+  // Persistent Device History Storage
+  const [localMyHistory, setLocalMyHistory] = useState<SongRequest[]>(() => {
+    try {
+      const raw = localStorage.getItem(`beatpulse_my_history_${deviceId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  });
 
-  // Filter requests placed from this device ID
-  const myDeviceRequests = userRequests.filter(
-    (r) => !r.deviceId || r.deviceId === currentDeviceId
-  );
-
-  // Initial load of real top hits from iTunes API
+  // Search iTunes API when user types in search box
   useEffect(() => {
-    async function loadHits() {
-      setIsSearchingWeb(true);
-      const hits = await fetchDefaultTopClubHits();
-      setDefaultHits(hits);
-      setIsSearchingWeb(false);
-    }
-    loadHits();
-  }, []);
-
-  // Live Web Search from iTunes API
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchResults([]);
-      setIsSearchingWeb(false);
+    if (!searchTerm.trim()) {
+      setSearchResults(songs);
       return;
     }
 
-    setIsSearchingWeb(true);
-    const timeoutId = setTimeout(async () => {
-      const liveSongs = await searchLiveWebMusic(searchQuery);
-      setSearchResults(liveSongs);
-      setIsSearchingWeb(false);
+    const delayDebounceFn = setTimeout(async () => {
+      setIsSearchingiTunes(true);
+      try {
+        const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(searchTerm)}&limit=15&entity=song`);
+        const data = await res.json();
+        if (data && data.results) {
+          const formatted: Song[] = data.results.map((item: any, idx: number) => ({
+            id: `itunes-${item.trackId || idx}`,
+            title: item.trackName || 'Canción',
+            artist: item.artistName || 'Artista',
+            albumCover: item.artworkUrl100 ? item.artworkUrl100.replace('100x100bb', '400x400bb') : 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80',
+            genre: item.primaryGenreName || 'Latin/Club',
+            bpm: 120,
+            duration: item.trackTimeMillis ? `${Math.floor(item.trackTimeMillis / 60000)}:${Math.floor((item.trackTimeMillis % 60000) / 1000).toString().padStart(2, '0')}` : '3:30',
+            energyLevel: 9,
+            previewUrl: item.previewUrl || undefined,
+          }));
+          setSearchResults(formatted);
+        }
+      } catch (e) {
+        console.warn('iTunes Search error:', e);
+      } finally {
+        setIsSearchingiTunes(false);
+      }
     }, 400);
 
-    return () => clearTimeout(timeoutId);
-  }, [searchQuery]);
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchTerm, songs]);
 
-  const rawDisplayedSongs = searchQuery.trim() ? searchResults : defaultHits;
-  const displayedSongs = rawDisplayedSongs.filter(
-    (song) => selectedGenre === 'Todos' || song.genre === selectedGenre
-  );
+  // Combine live state and persistent device history for customer
+  const myCombinedHistory = React.useMemo(() => {
+    const map = new Map<string, SongRequest>();
 
-  const getBasePriceCOP = (priorityId: string) => {
-    if (ownerConfig.pricingMode === 'flat_single') {
-      return ownerConfig.flatSinglePriceCOP;
+    // Add local persistent history first
+    for (const r of localMyHistory) {
+      if (r && r.id) map.set(r.id, r);
     }
-    if (priorityId === 'normal') return ownerConfig.tieredPricesCOP.normal;
-    if (priorityId === 'vip') return ownerConfig.tieredPricesCOP.vip;
-    if (priorityId === 'play_now') return ownerConfig.tieredPricesCOP.play_now;
-    return 10000;
-  };
 
-  const calculateTotalCOP = () => {
-    const base = getBasePriceCOP(selectedPriority.id);
-    return base + extraTipCOP;
-  };
+    // Add live matching device requests
+    const deviceRequests = userRequests.filter((r) => r.deviceId === deviceId || r.userName === userName);
+    for (const r of deviceRequests) {
+      if (r && r.id) map.set(r.id, r);
+    }
 
-  const handleOpenOrderModal = (song: Song) => {
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
+  }, [localMyHistory, userRequests, deviceId, userName]);
+
+  const totalCostCOP = (selectedPriority?.priceCOP || 10000) + tipAmountCOP;
+
+  const handleSelectSong = (song: Song) => {
     setSelectedSong(song);
-    soundFx.playScratch();
+    soundFx.playCoinChime();
   };
 
-  const handlePaymentSuccess = (paymentMethod: PaymentMethodType) => {
+  const handleSubmitRequestForm = (e: React.FormEvent) => {
+    e.preventDefault();
     if (!selectedSong) return;
 
-    const total = calculateTotalCOP();
+    setIsSubmitting(true);
 
-    onSubmitRequest({
+    const newReqData = {
+      deviceId,
       song: selectedSong,
-      userName: userName || 'Cliente Anónimo',
-      tableNumber: tableNumber || 'Mesa General',
-      priority: {
-        ...selectedPriority,
-        priceCOP: getBasePriceCOP(selectedPriority.id)
-      },
-      tipAmountCOP: extraTipCOP,
-      totalPaidCOP: total,
+      priority: selectedPriority,
+      userName: userName.trim() || 'Cliente Anónimo',
+      tableNumber: tableNumber.trim() || 'Mesa General',
+      dedicatedMessage: dedicatedMessage.trim() || undefined,
+      tipAmountCOP,
+      totalPaidCOP: totalCostCOP,
       paymentMethod,
-      dedicatedMessage: dedicatedMessage.trim() ? dedicatedMessage : undefined,
-    });
+    };
 
-    setIsNequiModalOpen(false);
+    onSubmitRequest(newReqData);
+
+    // Save to persistent device history storage
+    const createdReq: SongRequest = {
+      ...newReqData,
+      id: `req-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      status: 'pending',
+      platformFeeCOP: totalCostCOP * 0.2,
+      djShareCOP: totalCostCOP * 0.1,
+      clubShareCOP: totalCostCOP * 0.7,
+    };
+
+    const updatedHistory = [createdReq, ...localMyHistory];
+    setLocalMyHistory(updatedHistory);
+    try {
+      localStorage.setItem(`beatpulse_my_history_${deviceId}`, JSON.stringify(updatedHistory));
+    } catch (e) {}
+
+    setIsSubmitting(false);
+    setSubmitSuccessMsg('¡Tu canción ha sido enviada a la cabina del DJ! Confirma la transferencia en tu app bancaria.');
     setSelectedSong(null);
     setDedicatedMessage('');
-    setActiveTab('my_requests');
+    setTipAmountCOP(0);
+    setActiveSubTab('history');
   };
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
       
-      {/* Top Ultra-Attractive Party Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-purple-900/50 via-pink-900/40 to-slate-900/90 border border-purple-500/40 p-6 sm:p-8 shadow-2xl">
-        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-48 h-48 bg-pink-500/20 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-black text-pink-400 uppercase tracking-widest mb-1.5">
-              <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" /> Conectado en Vivo a {ownerConfig.clubName}
-            </div>
-            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight leading-tight">
-              ¡Haz que la fiesta suene <span className="text-gradient-neon">a tu ritmo!</span> 🔥
-            </h2>
-            <p className="text-sm text-slate-200 mt-1.5 font-medium leading-relaxed">
-              Elige tu canción favorita, enlázala directo a la cabina del DJ y proyecta tu dedicatoria en las pantallas del club 🪩✨
-            </p>
+      {/* Party Banner Header */}
+      <div className="glass-panel-neon p-6 rounded-3xl border border-purple-500/40 relative overflow-hidden text-center sm:text-left flex flex-col sm:flex-row items-center justify-between gap-6">
+        <div className="space-y-2 z-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30 text-xs font-bold uppercase tracking-wider">
+            <Radio className="w-3.5 h-3.5 animate-pulse" />
+            <span>Música en Vivo • Club Ibiza</span>
           </div>
+          <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            Pide tu Canción y Dedícala en la Pantalla del Club
+          </h2>
+          <p className="text-xs text-slate-300 max-w-lg">
+            Selecciona tu éxito musical favorito, ingresa tu mensaje de dedicatoria y sonará en los altavoces de la discoteca.
+          </p>
+        </div>
 
-          {/* Customer Tabs Switcher */}
-          <div className="flex items-center bg-black/50 p-1.5 rounded-2xl border border-white/10 w-full sm:w-auto overflow-x-auto flex-shrink-0">
-            <button
-              onClick={() => setActiveTab('catalog')}
-              className={`flex-1 sm:flex-initial px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                activeTab === 'catalog'
-                  ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              🎵 Catálogo
-            </button>
-            <button
-              onClick={() => setActiveTab('my_requests')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                activeTab === 'my_requests'
-                  ? 'bg-pink-600 text-white shadow-lg shadow-pink-600/40'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Radio className="w-3.5 h-3.5 animate-pulse text-pink-300" />
-              <span>Mis Pedidos</span>
-              {myDeviceRequests.length > 0 && (
-                <span className="px-1.5 py-0.5 rounded-full bg-white/20 text-[10px]">
-                  {myDeviceRequests.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setActiveTab('stage_screen')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                activeTab === 'stage_screen'
-                  ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-600/40'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Tv className="w-3.5 h-3.5 text-cyan-300" />
-              <span>🪩 Pantalla Club</span>
-            </button>
-          </div>
+        {/* Action Toggle Switcher */}
+        <div className="flex items-center bg-black/60 p-1.5 rounded-2xl border border-white/10 z-10 flex-shrink-0">
+          <button
+            onClick={() => setActiveSubTab('request')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all ${
+              activeSubTab === 'request'
+                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-600/30'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            🎵 Pedir Canción
+          </button>
+          <button
+            onClick={() => setActiveSubTab('history')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all relative ${
+              activeSubTab === 'history'
+                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-600/30'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            📋 Mis Pedidos ({myCombinedHistory.length})
+          </button>
         </div>
       </div>
 
-      {activeTab === 'catalog' && (
-        <>
-          {/* Search bar & Live Web API indicator */}
-          <div className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Busca cualquier canción en vivo (Ej: Feid, Bad Bunny, Karol G, Pepas...)"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-12 pr-12 py-3.5 rounded-2xl bg-[#12121e] border border-white/10 text-white placeholder-slate-400 focus:outline-none focus:border-purple-500 text-sm font-medium transition-all shadow-inner"
-              />
-              {isSearchingWeb ? (
-                <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-pink-400 animate-spin" />
-              ) : searchQuery ? (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              ) : null}
-            </div>
-
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-              {genresList.map((genre) => (
-                <button
-                  key={genre}
-                  onClick={() => setSelectedGenre(genre)}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                    selectedGenre === genre
-                      ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md'
-                      : 'bg-[#141422] text-slate-400 hover:text-white border border-white/5'
-                  }`}
-                >
-                  {genre}
-                </button>
-              ))}
-            </div>
+      {submitSuccessMsg && (
+        <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center justify-between animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+            <span>{submitSuccessMsg}</span>
           </div>
-
-          {/* Song Grid (Clean view: No local phone playback button) */}
-          {displayedSongs.length === 0 && !isSearchingWeb ? (
-            <div className="p-12 text-center text-slate-400 glass-panel rounded-3xl space-y-2">
-              <Music className="w-10 h-10 mx-auto opacity-40 animate-bounce" />
-              <p className="font-bold text-white">No se encontraron canciones</p>
-              <p className="text-xs text-slate-400">Intenta escribiendo el nombre de tu artista favorito en el buscador.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {displayedSongs.map((song) => (
-                <div
-                  key={song.id}
-                  className="glass-panel rounded-2xl p-4 flex items-center justify-between gap-4 glass-card-hover border border-white/5 group"
-                >
-                  <img
-                    src={song.albumCover}
-                    alt={song.title}
-                    className="w-16 h-16 rounded-xl object-cover shadow-md flex-shrink-0 group-hover:scale-105 transition-transform"
-                  />
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-white text-base truncate group-hover:text-pink-300 transition-colors">
-                        {song.title}
-                      </h3>
-                      {song.isExplicit && (
-                        <span className="px-1.5 py-0.2 text-[9px] font-black uppercase rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                          EXPLICIT
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-400 truncate mt-0.5">{song.artist}</p>
-
-                    <div className="flex items-center gap-2 mt-2 text-[11px]">
-                      <span className="px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-300 font-semibold border border-purple-500/20">
-                        {song.genre}
-                      </span>
-                      <span className="text-slate-400 font-mono">{song.bpm} BPM</span>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => handleOpenOrderModal(song)}
-                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold text-xs shadow-lg shadow-purple-600/30 flex-shrink-0 active:scale-95 transition-all"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Pedir</span>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
+          <button onClick={() => setSubmitSuccessMsg('')} className="text-emerald-400 hover:text-white font-bold ml-2">
+            ✕
+          </button>
+        </div>
       )}
 
-      {/* MY REQUESTS HISTORICAL RADAR */}
-      {activeTab === 'my_requests' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <Radio className="w-5 h-5 text-pink-400 animate-pulse" />
-              <span>Historial de Mis Pedidos y Dedicatorias</span>
-            </h3>
-            <span className="text-[10px] font-mono text-purple-300 bg-purple-900/40 px-2 py-1 rounded-md border border-purple-500/30">
-              ID Dispositivo: {currentDeviceId.substring(0, 14)}...
-            </span>
+      {/* SUBTAB 1: REQUEST A SONG FORM */}
+      {activeSubTab === 'request' && (
+        <div className="space-y-6">
+          
+          {/* Step 1: Search Music */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-extrabold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                <span>1. Busca tu Canción Favorita</span>
+                {isSearchingiTunes && <RefreshCw className="w-4 h-4 text-pink-400 animate-spin" />}
+              </h3>
+            </div>
+
+            <div className="relative">
+              <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Busca por nombre de canción o artista (ej: Farruko, Bad Bunny, Karol G)..."
+                className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-slate-900/90 border border-white/10 text-white text-sm focus:border-pink-500 outline-none shadow-inner"
+              />
+            </div>
+
+            {/* Song Grid List */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+              {searchResults.map((song) => {
+                const isSelected = selectedSong?.id === song.id;
+                return (
+                  <div
+                    key={song.id}
+                    onClick={() => handleSelectSong(song)}
+                    className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                      isSelected
+                        ? 'bg-gradient-to-r from-purple-900/60 to-pink-900/60 border-pink-500 ring-2 ring-pink-500/40 shadow-lg shadow-pink-500/20'
+                        : 'bg-[#12121e] border-white/10 hover:border-purple-500/40 hover:bg-slate-900/80'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <img src={song.albumCover} alt={song.title} className="w-14 h-14 rounded-xl object-cover shadow-md flex-shrink-0" />
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-white text-sm truncate">{song.title}</h4>
+                        <p className="text-xs text-slate-400 truncate">{song.artist}</p>
+                        <span className="text-[10px] text-pink-400 font-semibold">{song.genre}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex-shrink-0">
+                      {isSelected ? (
+                        <div className="w-7 h-7 rounded-full bg-pink-500 text-white flex items-center justify-center shadow-md">
+                          <CheckCircle2 className="w-5 h-5 fill-white text-pink-500" />
+                        </div>
+                      ) : (
+                        <button className="px-3 py-1.5 rounded-xl bg-purple-600/20 text-purple-300 text-xs font-bold hover:bg-purple-600 hover:text-white transition-all">
+                          Elegir
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          {myDeviceRequests.length === 0 ? (
-            <div className="glass-panel rounded-3xl p-8 text-center space-y-2 border border-white/10">
-              <Music className="w-10 h-10 text-slate-600 mx-auto animate-bounce" />
-              <p className="text-white font-bold">Aún no has solicitado ninguna canción desde este dispositivo</p>
-              <p className="text-slate-400 text-xs">Tus canciones y dedicatorias quedarán guardadas automáticamente en tu celular.</p>
+          {/* Form Options when song is selected */}
+          {selectedSong && (
+            <form onSubmit={handleSubmitRequestForm} className="glass-panel-neon p-6 rounded-3xl border border-purple-500/40 space-y-6 animate-fadeIn">
+              
+              <div className="flex items-center gap-3 pb-4 border-b border-white/10">
+                <img src={selectedSong.albumCover} alt={selectedSong.title} className="w-12 h-12 rounded-xl object-cover" />
+                <div>
+                  <span className="text-[10px] font-bold text-pink-400 uppercase tracking-widest block">Canción Seleccionada</span>
+                  <h4 className="font-extrabold text-white text-base">{selectedSong.title}</h4>
+                  <p className="text-xs text-slate-400">{selectedSong.artist}</p>
+                </div>
+              </div>
+
+              {/* Step 2: Priority Speed Options */}
+              <div className="space-y-3">
+                <label className="text-xs font-extrabold text-slate-200 uppercase tracking-wider block">
+                  2. Elige la Velocidad de Reproducción
+                </label>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {INITIAL_PRIORITY_OPTIONS.map((prio) => {
+                    const isPrioSelected = selectedPriority.id === prio.id;
+                    return (
+                      <div
+                        key={prio.id}
+                        onClick={() => setSelectedPriority(prio)}
+                        className={`p-4 rounded-2xl border transition-all cursor-pointer space-y-2 ${
+                          isPrioSelected
+                            ? 'bg-purple-900/50 border-pink-500 ring-2 ring-pink-500/40 shadow-lg'
+                            : 'bg-slate-900/70 border-white/10 hover:border-white/20'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold text-white">{prio.badge}</span>
+                          <span className="text-xs font-mono font-bold text-emerald-400">
+                            ${prio.priceCOP.toLocaleString('es-CO')} COP
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-300">{prio.tagline}</p>
+                        <p className="text-[10px] text-slate-400 font-semibold">⏱ Espera estimada: ~{prio.estimatedWaitMinutes} min</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Step 3: User Info & Message */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">Tu Nombre o Apodo</label>
+                  <input
+                    type="text"
+                    required
+                    value={userName}
+                    onChange={(e) => setUserName(e.target.value)}
+                    placeholder="Ej: Carlos / Sofía"
+                    className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:border-pink-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">Número de Mesa o Ubicación</label>
+                  <input
+                    type="text"
+                    required
+                    value={tableNumber}
+                    onChange={(e) => setTableNumber(e.target.value)}
+                    placeholder="Ej: Mesa 12 / Barra Principal"
+                    className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:border-pink-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Dedication Message */}
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">
+                  💬 Mensaje de Dedicatoria (Saldrá en la Pantalla del Club)
+                </label>
+                <input
+                  type="text"
+                  maxLength={120}
+                  value={dedicatedMessage}
+                  onChange={(e) => setDedicatedMessage(e.target.value)}
+                  placeholder="Ej: ¡Para la mesa 5 con mucho cariño! / ¡Feliz cumpleaños Ana! 🎉"
+                  className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:border-pink-500 outline-none"
+                />
+              </div>
+
+              {/* Payment Method Selector */}
+              <div className="space-y-3 pt-2">
+                <label className="text-xs font-extrabold text-slate-200 uppercase tracking-wider block">
+                  3. Método de Pago Automático por QR
+                </label>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('nequi_qr')}
+                    className={`p-3 rounded-2xl border text-center font-bold text-xs transition-all ${
+                      paymentMethod === 'nequi_qr'
+                        ? 'bg-purple-900/60 border-pink-500 text-white shadow-md'
+                        : 'bg-slate-900 border-white/10 text-slate-400'
+                    }`}
+                  >
+                    💜 Nequi QR
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('bancolombia_qr')}
+                    className={`p-3 rounded-2xl border text-center font-bold text-xs transition-all ${
+                      paymentMethod === 'bancolombia_qr'
+                        ? 'bg-amber-900/60 border-amber-500 text-white shadow-md'
+                        : 'bg-slate-900 border-white/10 text-slate-400'
+                    }`}
+                  >
+                    💛 Bancolombia QR
+                  </button>
+                </div>
+              </div>
+
+              {/* Total Summary & Submit Button */}
+              <div className="p-4 rounded-2xl bg-black/60 border border-purple-500/30 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div>
+                  <span className="text-xs text-slate-400 block">Total a Transferir:</span>
+                  <div className="text-2xl font-black text-white">
+                    <span className="text-gradient-gold">${totalCostCOP.toLocaleString('es-CO')}</span>
+                    <span className="text-xs text-slate-400 font-normal ml-1">COP</span>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 text-white font-extrabold text-xs shadow-lg shadow-purple-600/40 active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>Enviar Canción y Pagar</span>
+                </button>
+              </div>
+
+            </form>
+          )}
+
+        </div>
+      )}
+
+      {/* SUBTAB 2: MY PROGRAMMED SONGS HISTORY */}
+      {activeSubTab === 'history' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-extrabold text-slate-200 uppercase tracking-wider">
+              Historial de mis Canciones Programadas
+            </h3>
+            <span className="text-xs font-mono font-bold text-purple-400">ID Dispositivo: {deviceId.substring(0, 14)}...</span>
+          </div>
+
+          {myCombinedHistory.length === 0 ? (
+            <div className="p-12 text-center text-slate-400 glass-panel rounded-3xl space-y-3 border border-white/10">
+              <Music className="w-12 h-12 mx-auto text-purple-400 opacity-40 animate-bounce" />
+              <h4 className="text-base font-bold text-white">Aún no has pedido canciones</h4>
+              <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                Tus canciones solicitadas y sus dedicatorias quedarán guardadas aquí en tu historial.
+              </p>
             </div>
           ) : (
             <div className="space-y-3">
-              {myDeviceRequests.map((req) => (
-                <div key={req.id} className="glass-panel-neon rounded-3xl p-5 border border-purple-500/30 space-y-3">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <img src={req.song.albumCover} alt={req.song.title} className="w-14 h-14 rounded-2xl object-cover shadow-md flex-shrink-0" />
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-white text-base truncate">{req.song.title}</h4>
-                          <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
-                            {req.priority.badge}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-400 truncate">{req.song.artist} • ${req.totalPaidCOP.toLocaleString('es-CO')} COP</p>
-                        
-                        <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400 font-mono">
-                          <Calendar className="w-3 h-3 text-purple-400" />
-                          <span>{new Date(req.createdAt).toLocaleDateString('es-CO')} • {new Date(req.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        </div>
+              {myCombinedHistory.map((req) => (
+                <div key={req.id} className="p-4 rounded-2xl bg-[#12121e] border border-white/10 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <img src={req.song?.albumCover} alt={req.song?.title} className="w-14 h-14 rounded-xl object-cover shadow-md flex-shrink-0" />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                          req.status === 'playing' ? 'bg-pink-500 text-white animate-pulse' :
+                          req.status === 'accepted' ? 'bg-emerald-500/20 text-emerald-300' :
+                          req.status === 'rejected' ? 'bg-rose-500/20 text-rose-300' :
+                          'bg-purple-500/20 text-purple-300'
+                        }`}>
+                          {req.status === 'playing' ? '🎶 SONANDO AHORA EN PANTALLA' :
+                           req.status === 'accepted' ? '✅ ACEPTADA POR DJ' :
+                           req.status === 'rejected' ? '❌ RECHAZADA' :
+                           '⏳ PENDIENTE VERIFICACIÓN DJ'}
+                        </span>
+                        <span className="text-xs font-mono font-bold text-emerald-400">${(req.totalPaidCOP || 0).toLocaleString('es-CO')} COP</span>
                       </div>
-                    </div>
 
-                    <span className={`px-3 py-1 rounded-full text-xs font-extrabold flex-shrink-0 ${
-                      req.status === 'playing' ? 'bg-pink-500 text-white animate-pulse' : 'bg-emerald-500/20 text-emerald-300'
-                    }`}>
-                      {req.status === 'pending' && '⏳ Esperando DJ'}
-                      {req.status === 'accepted' && '✅ Aprobado'}
-                      {req.status === 'sent_to_vdj' && '⚡ En VirtualDJ'}
-                      {req.status === 'playing' && '🎵 SONANDO AHORA'}
-                    </span>
+                      <h4 className="font-bold text-white text-sm truncate mt-1">{req.song?.title}</h4>
+                      <p className="text-xs text-slate-400 truncate">{req.song?.artist} • {new Date(req.createdAt).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</p>
+
+                      {req.dedicatedMessage && (
+                        <p className="mt-1 text-xs text-pink-300 italic truncate">💬 "{req.dedicatedMessage}"</p>
+                      )}
+                    </div>
                   </div>
-
-                  {req.dedicatedMessage && (
-                    <div className="p-3 rounded-2xl bg-pink-500/10 border border-pink-500/20 text-xs text-pink-200 flex items-start gap-2">
-                      <MessageSquare className="w-4 h-4 text-pink-400 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <strong className="text-pink-300 block">Dedicatoria para Pantallas:</strong> "{req.dedicatedMessage}"
-                      </div>
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
@@ -376,194 +500,12 @@ export const ClientView: React.FC<ClientViewProps> = ({
         </div>
       )}
 
-      {activeTab === 'stage_screen' && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <Tv className="w-5 h-5 text-cyan-400 animate-pulse" />
-              <span>Pantalla en Vivo del Club</span>
-            </h3>
-            <span className="text-xs text-slate-400">Transmisión en tiempo real</span>
-          </div>
-
-          <StageScreenView requests={userRequests.length > 0 ? userRequests : []} />
-        </div>
-      )}
-
-      {/* REQUEST MODAL */}
-      {selectedSong && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="relative w-full max-w-lg glass-panel-neon rounded-3xl p-6 border border-purple-500/40 space-y-5 max-h-[90vh] overflow-y-auto">
-            
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="text-[11px] font-bold text-pink-400 uppercase tracking-widest">
-                  Programar Canción al DJ
-                </span>
-                <h3 className="text-xl font-extrabold text-white">{selectedSong.title}</h3>
-                <p className="text-xs text-slate-300">{selectedSong.artist}</p>
-              </div>
-              <button onClick={() => setSelectedSong(null)} className="p-1.5 text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* User Form */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">Tu Nombre</label>
-                <input
-                  type="text"
-                  value={userName}
-                  onChange={(e) => setUserName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-xs font-semibold outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">Mesa / Ubicación</label>
-                <input
-                  type="text"
-                  value={tableNumber}
-                  onChange={(e) => setTableNumber(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-xs font-semibold outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Priority Option Selector */}
-            {ownerConfig.pricingMode === 'flat_single' ? (
-              <div className="p-4 rounded-2xl bg-purple-900/30 border border-purple-500/40 text-center space-y-1">
-                <span className="text-xs font-bold text-purple-300 uppercase">Tarifa Única Fija del Club</span>
-                <div className="text-2xl font-extrabold text-white">
-                  ${ownerConfig.flatSinglePriceCOP.toLocaleString('es-CO')} COP
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {INITIAL_PRIORITY_OPTIONS.map((priority) => {
-                  const price = getBasePriceCOP(priority.id);
-                  return (
-                    <div
-                      key={priority.id}
-                      onClick={() => setSelectedPriority(priority)}
-                      className={`p-3.5 rounded-2xl border cursor-pointer flex items-center justify-between ${
-                        selectedPriority.id === priority.id
-                          ? 'bg-purple-900/40 border-purple-500 ring-2 ring-purple-500/30'
-                          : 'bg-slate-900/60 border-white/5'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white bg-gradient-to-tr ${priority.color}`}>
-                          {priority.id === 'play_now' ? <Flame className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-white text-sm">{priority.name}</h4>
-                          <p className="text-xs text-slate-400">{priority.tagline}</p>
-                        </div>
-                      </div>
-
-                      <span className="font-black text-white text-base font-mono">
-                        ${price.toLocaleString('es-CO')} COP
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Extra Tip Slider */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-[11px] font-bold text-slate-300 uppercase">Propina Extra (COP)</label>
-                <span className="text-xs font-bold text-amber-400">+${extraTipCOP.toLocaleString('es-CO')} COP</span>
-              </div>
-              <div className="flex items-center gap-2">
-                {[0, 2000, 5000, 10000, 20000].map((amt) => (
-                  <button
-                    key={amt}
-                    type="button"
-                    onClick={() => setExtraTipCOP(amt)}
-                    className={`flex-1 py-1.5 rounded-xl text-xs font-bold ${
-                      extraTipCOP === amt ? 'bg-amber-500 text-black' : 'bg-slate-900 text-slate-400'
-                    }`}
-                  >
-                    {amt === 0 ? 'Sin tip' : `+$${amt / 1000}k`}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Dedicated Message Input */}
-            <div>
-              <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
-                Dedicatoria para Pantallas del Club
-              </label>
-              <input
-                type="text"
-                maxLength={70}
-                value={dedicatedMessage}
-                onChange={(e) => setDedicatedMessage(e.target.value)}
-                placeholder="Ej: ¡Salud por el cumple de Mafe! 🎉"
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-white/10 text-white text-xs outline-none"
-              />
-            </div>
-
-            {/* Proceed to Payment Button */}
-            <div className="pt-3 border-t border-white/10 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-400">Total a Pagar:</span>
-                <span className="text-2xl font-extrabold text-white text-gradient-gold">
-                  ${calculateTotalCOP().toLocaleString('es-CO')} COP
-                </span>
-              </div>
-
-              <button
-                onClick={() => setIsNequiModalOpen(true)}
-                className="w-full py-4 rounded-2xl bg-gradient-to-r from-pink-600 via-purple-600 to-amber-500 text-white font-extrabold text-sm shadow-xl shadow-pink-600/40 flex items-center justify-center gap-2"
-              >
-                <Smartphone className="w-5 h-5" />
-                <span>Enviar Canción y Pagar por QR</span>
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* NEQUI / BANCOLOMBIA QR PAYMENT MODAL */}
-      {selectedSong && (
-        <NequiBancolombiaPaymentModal
-          isOpen={isNequiModalOpen}
-          song={selectedSong}
-          priority={selectedPriority}
-          extraTipCOP={extraTipCOP}
-          totalCOP={calculateTotalCOP()}
-          userName={userName}
-          tableNumber={tableNumber}
-          dedicatedMessage={dedicatedMessage}
-          ownerConfig={ownerConfig}
-          onClose={() => setIsNequiModalOpen(false)}
-          onConfirmSuccess={handlePaymentSuccess}
-        />
-      )}
-
-      {/* Subtle Developer Contact Footer */}
-      <footer className="pt-8 pb-4 border-t border-white/5 text-center text-[11px] text-slate-500 font-medium space-y-1">
-        <p>
-          Desarrollado por <strong className="text-slate-300">BeatPulse DJ Platform</strong>
+      {/* Contact Footer */}
+      <footer className="pt-8 border-t border-white/10 text-center text-xs text-slate-400 space-y-2">
+        <p className="font-semibold text-slate-300">
+          ¿Problemas con tu pedido? Soporte desarrollador WhatsApp: <a href="https://wa.me/573227949751" target="_blank" rel="noreferrer" className="text-emerald-400 hover:underline font-bold">+57 322 794 9751</a>
         </p>
-        <p className="flex items-center justify-center gap-1">
-          <PhoneCall className="w-3 h-3 text-pink-400" />
-          <span>Soporte / Contacto Desarrollador:</span>
-          <a
-            href="https://wa.me/573227949751"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-pink-400 font-bold hover:underline ml-0.5"
-          >
-            +57 322 794 9751
-          </a>
-        </p>
+        <p className="text-[10px] text-slate-400">BeatPulse DJ Platform © 2026 • Todos los derechos reservados</p>
       </footer>
 
     </div>
