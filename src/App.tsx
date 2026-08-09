@@ -44,7 +44,7 @@ export function App() {
     connected: true,
     serverUrl: 'http://localhost',
     port: 8000,
-    autoAcceptThresholdCOP: 30000,
+    autoAcceptThresholdCOP: 10000, // Instant auto-play for all requests
     autoSyncToAutomix: true,
     sentCount: 2,
     lastPing: new Date().toISOString()
@@ -144,24 +144,19 @@ export function App() {
     const djShareCOP = totalPaid * (ownerConfig.djSharePercent / 100);
     const clubShareCOP = totalPaid * (ownerConfig.clubSharePercent / 100);
 
-    const isAutoAccept = vdjConfig.autoSyncToAutomix && totalPaid >= vdjConfig.autoAcceptThresholdCOP;
-
+    // Instant auto-play and display on Stage Screen
     const newRequest: SongRequest = {
       ...newReqData,
       id: `req-${Date.now()}`,
       createdAt: new Date().toISOString(),
-      status: isAutoAccept ? 'sent_to_vdj' : 'pending',
+      status: 'playing', // Instant play on Club Screen!
       platformFeeCOP,
       djShareCOP,
       clubShareCOP,
     };
 
     setRequests((prev) => [newRequest, ...prev]);
-
-    if (isAutoAccept) {
-      soundFx.playAirhorn();
-      setVdjConfig((prev) => ({ ...prev, sentCount: prev.sentCount + 1 }));
-    }
+    soundFx.playAirhorn();
   };
 
   const handleUpdateRequestStatus = (requestId: string, newStatus: RequestStatus, reason?: string) => {

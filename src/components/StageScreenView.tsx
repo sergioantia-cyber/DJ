@@ -1,5 +1,5 @@
-import React from 'react';
-import { Disc3, QrCode, Sparkles, MessageSquare, Volume2, Radio, Zap } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Disc3, QrCode, Sparkles, MessageSquare, Volume2, VolumeX, Radio, Zap, Play, Pause } from 'lucide-react';
 import { SongRequest } from '../types';
 
 interface StageScreenViewProps {
@@ -7,8 +7,63 @@ interface StageScreenViewProps {
 }
 
 export const StageScreenView: React.FC<StageScreenViewProps> = ({ requests }) => {
-  const currentSongReq = requests.find((r) => r.status === 'playing') || requests[0];
-  const nextSongReq = requests.find((r) => r.status === 'accepted' || r.status === 'sent_to_vdj' || r.status === 'pending');
+  // Find currently playing request, or fallback to the newest active request
+  const currentSongReq =
+    requests.find((r) => r.status === 'playing') ||
+    requests.find((r) => r.status === 'sent_to_vdj' || r.status === 'accepted' || r.status === 'pending') ||
+    requests[0];
+
+  const nextSongReq = requests.find(
+    (r) => r.id !== currentSongReq?.id && r.status !== 'rejected' && r.status !== 'completed'
+  );
+
+  const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Auto-play audio whenever the active song changes
+  useEffect(() => {
+    if (!currentSongReq || !currentSongReq.song) return;
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+
+    if (currentSongReq.song.previewUrl) {
+      const audio = new Audio(currentSongReq.song.previewUrl);
+      audioRef.current = audio;
+      audio.play().then(() => {
+        setIsPlayingAudio(true);
+      }).catch((e) => {
+        console.log('Audio autoplay requires user interaction:', e);
+        setIsPlayingAudio(false);
+      });
+
+      audio.onended = () => {
+        setIsPlayingAudio(false);
+      };
+    }
+  }, [currentSongReq?.id]);
+
+  const handleToggleStageAudio = () => {
+    if (!audioRef.current && currentSongReq?.song.previewUrl) {
+      const audio = new Audio(currentSongReq.song.previewUrl);
+      audioRef.current = audio;
+      audio.play();
+      setIsPlayingAudio(true);
+      return;
+    }
+
+    if (audioRef.current) {
+      if (isPlayingAudio) {
+        audioRef.current.pause();
+        setIsPlayingAudio(false);
+      } else {
+        audioRef.current.play();
+        setIsPlayingAudio(true);
+      }
+    }
+  };
 
   return (
     <div className="min-h-[88vh] bg-club-gradient rounded-3xl p-6 sm:p-10 border border-purple-500/30 flex flex-col justify-between relative overflow-hidden shadow-2xl">
@@ -17,19 +72,31 @@ export const StageScreenView: React.FC<StageScreenViewProps> = ({ requests }) =>
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl pointer-events-none animate-pulse"></div>
       <div className="absolute bottom-10 right-10 w-96 h-96 bg-pink-600/20 rounded-full blur-3xl pointer-events-none animate-pulse"></div>
 
-      {/* Top Header: Club Name & Live Indicator */}
+      {/* Top Header: Club Name & Live Indicator & Stage Audio Toggle */}
       <div className="flex items-center justify-between z-10">
         <div className="flex items-center gap-3">
           <div className="w-4 h-4 rounded-full bg-pink-500 animate-ping"></div>
           <h2 className="text-2xl sm:text-4xl font-black text-white tracking-widest uppercase">
-            CLUB IBIZA <span className="text-gradient-neon">• LIVE BOOTH</span>
+            CLUB IBIZA <span className="text-gradient-neon">• EN VIVO</span>
           </h2>
         </div>
 
-        <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-black/60 border border-purple-500/40 backdrop-blur-md">
-          <Radio className="w-5 h-5 text-pink-400 animate-pulse" />
-          <span className="text-xs font-black tracking-widest text-white uppercase">SONIDO DE CABINA VIRTUALDJ</span>
-        </div>
+        {/* Audio Toggle Button for Stage Screen */}
+        {currentSongReq?.song.previewUrl && (
+          <button
+            onClick={handleToggleStageAudio}
+            className={`flex items-center gap-2 px-4 py-2 rounded-2xl border backdrop-blur-md transition-all ${
+              isPlayingAudio
+                ? 'bg-pink-600/80 border-pink-400 text-white shadow-lg shadow-pink-600/40'
+                : 'bg-black/60 border-purple-500/40 text-pink-300 hover:text-white'
+            }`}
+          >
+            {isPlayingAudio ? <Volume2 className="w-5 h-5 animate-bounce" /> : <VolumeX className="w-5 h-5" />}
+            <span className="text-xs font-black tracking-wider uppercase">
+              {isPlayingAudio ? 'SONIDO EN VIVO ACTIVO' : 'ACTIVAR SONIDO PANTALLA'}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Center Stage: Now Playing Showcase */}
@@ -59,7 +126,7 @@ export const StageScreenView: React.FC<StageScreenViewProps> = ({ requests }) =>
           <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
             <div>
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-pink-500/20 border border-pink-500/40 text-pink-300 text-xs font-black tracking-widest uppercase mb-3">
-                <Sparkles className="w-4 h-4" /> SONANDO AHORA EN LA PISTA
+                <Sparkles className="w-4 h-4 text-amber-400" /> SONANDO AHORA EN LA PISTA
               </div>
               <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-none drop-shadow-lg">
                 {currentSongReq.song.title}
@@ -80,7 +147,7 @@ export const StageScreenView: React.FC<StageScreenViewProps> = ({ requests }) =>
                 </p>
               </div>
             ) : (
-              <div className="text-sm text-slate-400 font-semibold italic">
+              <div className="text-sm text-slate-300 font-semibold italic">
                 Solicitado por <strong className="text-white">{currentSongReq.userName}</strong> ({currentSongReq.tableNumber})
               </div>
             )}
@@ -98,7 +165,12 @@ export const StageScreenView: React.FC<StageScreenViewProps> = ({ requests }) =>
           </div>
 
         </div>
-      ) : null}
+      ) : (
+        <div className="p-12 text-center space-y-4">
+          <Disc3 className="w-16 h-16 text-pink-400 mx-auto animate-spin" />
+          <h3 className="text-2xl font-black text-white">Esperando la primera canción solicitada...</h3>
+        </div>
+      )}
 
       {/* Bottom Footer: Next Up + Scan QR Box */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-6 border-t border-purple-500/20 z-10 items-center">
@@ -130,7 +202,7 @@ export const StageScreenView: React.FC<StageScreenViewProps> = ({ requests }) =>
               ¿Quieres escuchar tu música?
             </span>
             <h4 className="text-sm font-extrabold text-white">Escanea para pedir al DJ</h4>
-            <p className="text-[11px] text-slate-300 mt-0.5">Paga al instante con Apple Pay / Tarjeta</p>
+            <p className="text-[11px] text-slate-300 mt-0.5">Paga fácil con Nequi o Bancolombia</p>
           </div>
           <div className="w-16 h-16 bg-white rounded-xl p-1.5 flex items-center justify-center flex-shrink-0 shadow-lg">
             <QrCode className="w-full h-full text-slate-900" />
