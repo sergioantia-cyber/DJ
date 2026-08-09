@@ -15,10 +15,9 @@ import {
   getLocalStoredRequests,
   saveLocalStoredRequests,
   getOrCreateDeviceId,
-  broadcastNewRequestToCloud,
-  broadcastStatusUpdateToCloud,
-  subscribeToGlobalRealtime,
-  fetchCloudRequests
+  fetchCloudRequests,
+  saveCloudRequests,
+  subscribeToGlobalRealtime
 } from './services/realtimeSyncService';
 
 export function App() {
@@ -92,26 +91,11 @@ export function App() {
     return () => clearInterval(intervalId);
   }, []);
 
-  // 2. Realtime Broadcast Listener
+  // 2. Realtime Local Broadcast Listener
   useEffect(() => {
-    const unsubscribe = subscribeToGlobalRealtime(
-      (newCloudReq) => {
-        setRequests((prev) => {
-          if (prev.some((r) => r.id === newCloudReq.id)) return prev;
-          const updated = [newCloudReq, ...prev];
-          saveLocalStoredRequests(updated);
-          return updated;
-        });
-      },
-      (requestId, status, reason) => {
-        setRequests((prev) => {
-          const updated = prev.map((r) => (r.id === requestId ? { ...r, status: status as RequestStatus, rejectionReason: reason } : r));
-          saveLocalStoredRequests(updated);
-          return updated;
-        });
-      }
-    );
-
+    const unsubscribe = subscribeToGlobalRealtime((updatedReqs) => {
+      setRequests(updatedReqs);
+    });
     return () => unsubscribe();
   }, []);
 
@@ -216,10 +200,7 @@ export function App() {
 
     const updatedRequests = [newRequest, ...requests];
     setRequests(updatedRequests);
-    saveLocalStoredRequests(updatedRequests);
-
-    // Broadcast & Insert into Supabase Cloud Database
-    broadcastNewRequestToCloud(newRequest);
+    saveCloudRequests(updatedRequests);
 
     soundFx.playAirhorn();
   };
@@ -244,10 +225,7 @@ export function App() {
     });
 
     setRequests(updatedRequests);
-    saveLocalStoredRequests(updatedRequests);
-
-    // Broadcast status update to Supabase Cloud Database
-    broadcastStatusUpdateToCloud(requestId, newStatus, reason);
+    saveCloudRequests(updatedRequests);
   };
 
   const handleUpdateOwnerConfig = (updatedFields: Partial<OwnerConfig>) => {
@@ -268,7 +246,7 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#08080c] text-slate-100 flex flex-col font-['Outfit',sans-serif]">
+    <div className="min-h-screen bg-[#08080c] text-slate-100 flex flex-col font-[#Outfit#,sans-serif]">
       
       {/* Top Header */}
       <Navbar
