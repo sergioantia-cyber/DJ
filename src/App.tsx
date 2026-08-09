@@ -65,6 +65,7 @@ export function App() {
   const [pinError, setPinError] = useState<string>('');
 
   const DJ_PIN = '1234';
+  const STAFF_PIN = '0000'; // Master / Staff Access Password
   const OWNER_PIN = '9999';
 
   const [vdjConfig, setVdjConfig] = useState<VirtualDJConfig>({
@@ -175,45 +176,17 @@ export function App() {
   };
 
   const handleVerifyPin = () => {
-    if (pinPromptRole === 'admin') {
-      if (enteredPin === DJ_PIN || enteredPin === OWNER_PIN) {
-        soundFx.playCoinChime();
-        setIsStealthAdminUnlocked(true);
-        setActiveTab(enteredPin === OWNER_PIN ? 'owner' : 'dj');
-        setPinPromptRole(null);
-        if (enteredPin === OWNER_PIN && !ownerConfig.hasAcceptedTerms) {
-          setIsTermsModalOpen(true);
-        }
-      } else {
-        setPinError('Clave de acceso incorrecta');
-        soundFx.playScratch();
+    if (enteredPin === DJ_PIN || enteredPin === STAFF_PIN || enteredPin === OWNER_PIN) {
+      soundFx.playCoinChime();
+      setIsStealthAdminUnlocked(true);
+      setActiveTab(enteredPin === OWNER_PIN ? 'owner' : 'dj');
+      setPinPromptRole(null);
+      if (enteredPin === OWNER_PIN && !ownerConfig.hasAcceptedTerms) {
+        setIsTermsModalOpen(true);
       }
-      return;
-    }
-
-    if (pinPromptRole === 'dj') {
-      if (enteredPin === DJ_PIN) {
-        soundFx.playCoinChime();
-        setIsStealthAdminUnlocked(true);
-        setActiveTab('dj');
-        setPinPromptRole(null);
-      } else {
-        setPinError('PIN de Cabina DJ incorrecto (Clave: 1234)');
-        soundFx.playScratch();
-      }
-    } else if (pinPromptRole === 'owner') {
-      if (enteredPin === OWNER_PIN) {
-        soundFx.playCoinChime();
-        setIsStealthAdminUnlocked(true);
-        setActiveTab('owner');
-        setPinPromptRole(null);
-        if (!ownerConfig.hasAcceptedTerms) {
-          setIsTermsModalOpen(true);
-        }
-      } else {
-        setPinError('PIN de Administrador incorrecto (Clave: 9999)');
-        soundFx.playScratch();
-      }
+    } else {
+      setPinError('Clave de acceso incorrecta (Usar: 0000, 1234 o 9999)');
+      soundFx.playScratch();
     }
   };
 
@@ -386,9 +359,7 @@ export function App() {
                   : 'Panel de Administración del Dueño'}
               </h3>
               <p className="text-xs text-slate-300">
-                {pinPromptRole === 'dj'
-                  ? 'Ingresa el PIN del DJ (Clave: 1234)'
-                  : 'Ingresa el PIN del Administrador (Clave: 9999)'}
+                Ingresa la clave de acceso (DJ/Staff: <strong>0000</strong> o <strong>1234</strong> • Dueño: <strong>9999</strong>)
               </p>
             </div>
 
