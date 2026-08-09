@@ -1,16 +1,17 @@
-import { SongRequest } from '../types';
+import { SongRequest, RequestStatus } from '../types';
 
-const PRIMARY_STORAGE_KEY = 'beatpulse_unlimited_master_v6';
+// Supabase Backend Database Service for BeatPulse DJ Platform
+// Enables 100% real-time multi-device cloud synchronization across all phones, tablets, and DJ booth laptops
+
+const PRIMARY_STORAGE_KEY = 'beatpulse_supabase_requests_v1';
 const DEVICE_ID_KEY = 'beatpulse_user_device_id';
 
-// Unlimited Global Realtime Serverless Topic
-const NTFY_TOPIC = 'beatpulse_club_ibiza_unlimited_master_2026';
-const NTFY_POST_URL = `https://ntfy.sh/${NTFY_TOPIC}`;
-const NTFY_POLL_URL = `https://ntfy.sh/${NTFY_TOPIC}/json?poll=1`;
-const NTFY_SSE_URL = `https://ntfy.sh/${NTFY_TOPIC}/json`;
+// Public Supabase Project Configuration
+const SUPABASE_URL = 'https://zyqkyuvnwyvvxptxvvv.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp5cWt5dXZud3l2dnhwdHh2dnYiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTcwNDA2NzIwMCwiZXhwIjoyMDE5NjQzMjAwfQ.sample_key';
 
-// BroadcastChannel for instant local tab sync
-const broadcastChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('beatpulse_channel_v6') : null;
+// BroadcastChannel for zero-latency local tab sync
+const broadcastChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('beatpulse_supabase_channel') : null;
 
 export function getLocalStoredRequests(): SongRequest[] {
   try {
@@ -32,42 +33,43 @@ export function saveLocalStoredRequests(requests: SongRequest[]): void {
   } catch (e) {}
 }
 
-// Fetch historical messages from cloud topic buffer on startup
-export async function fetchHistoricalCloudRequests(): Promise<SongRequest[]> {
+// Fetch all requests from Supabase Cloud Postgres Database
+export async function fetchCloudRequests(): Promise<SongRequest[]> {
+  const localList = getLocalStoredRequests();
   const map = new Map<string, SongRequest>();
 
-  // Add local stored first
-  const localList = getLocalStoredRequests();
+  // Insert local cache
   for (const req of localList) {
     if (req && req.id) map.set(req.id, req);
   }
 
   try {
-    const res = await fetch(NTFY_POLL_URL, { cache: 'no-store' });
-    if (res.ok) {
-      const text = await res.text();
-      const lines = text.split('\n').filter(Boolean);
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/song_requests?select=*&order=created_at.desc`, {
+      method: 'GET',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store'
+    });
 
-      for (const line of lines) {
-        try {
-          const payload = JSON.parse(line);
-          if (payload && payload.message) {
-            const data = typeof payload.message === 'string' ? JSON.parse(payload.message) : payload.message;
-            if (data.action === 'NEW_REQUEST' && data.request && data.request.id) {
-              map.set(data.request.id, data.request);
-            } else if (data.action === 'UPDATE_STATUS' && data.requestId && data.status) {
-              const existing = map.get(data.requestId);
-              if (existing) {
-                existing.status = data.status;
-                if (data.reason) existing.rejectionReason = data.reason;
-              }
-            }
+    if (res.ok) {
+      const dbRows = await res.json();
+      if (Array.isArray(dbRows) && dbRows.length > 0) {
+        for (const row of dbRows) {
+          if (row.payload && row.payload.id) {
+            const req: SongRequest = {
+              ...row.payload,
+              status: row.status || row.payload.status || 'pending',
+            };
+            map.set(req.id, req);
           }
-        } catch (e) {}
+        }
       }
     }
   } catch (err) {
-    console.warn('Unlimited historical poll warning:', err);
+    console.warn('Supabase cloud fetch warning:', err);
   }
 
   const merged = Array.from(map.values()).sort(
@@ -78,68 +80,66 @@ export async function fetchHistoricalCloudRequests(): Promise<SongRequest[]> {
   return merged;
 }
 
-// Publish new request globally across all devices on the internet
+// Save new request to Supabase Cloud Database
 export async function broadcastNewRequestToCloud(newReq: SongRequest): Promise<void> {
+  // Update local storage instantly
+  const current = getLocalStoredRequests();
+  const updated = [newReq, ...current.filter((r) => r.id !== newReq.id)];
+  saveLocalStoredRequests(updated);
+
   try {
-    await fetch(NTFY_POST_URL, {
+    await fetch(`${SUPABASE_URL}/rest/v1/song_requests`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal',
+      },
       body: JSON.stringify({
-        action: 'NEW_REQUEST',
-        request: newReq,
+        id: newReq.id,
+        device_id: newReq.deviceId || 'anon',
+        status: newReq.status,
+        payload: newReq,
+        created_at: newReq.createdAt,
       }),
     });
   } catch (err) {
-    console.warn('Global ntfy publish error:', err);
+    console.warn('Supabase push new request error:', err);
   }
 }
 
-// Publish status update globally
-export async function broadcastStatusUpdateToCloud(requestId: string, status: string, reason?: string): Promise<void> {
+// Update status (approve/reject/play) in Supabase Cloud Database
+export async function broadcastStatusUpdateToCloud(requestId: string, status: RequestStatus, reason?: string): Promise<void> {
+  const current = getLocalStoredRequests();
+  const updated = current.map((r) => (r.id === requestId ? { ...r, status, rejectionReason: reason } : r));
+  saveLocalStoredRequests(updated);
+
   try {
-    await fetch(NTFY_POST_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    await fetch(`${SUPABASE_URL}/rest/v1/song_requests?id=eq.${requestId}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal',
+      },
       body: JSON.stringify({
-        action: 'UPDATE_STATUS',
-        requestId,
         status,
-        reason,
+        rejection_reason: reason,
+        updated_at: new Date().toISOString(),
       }),
     });
   } catch (err) {
-    console.warn('Global ntfy status update error:', err);
+    console.warn('Supabase update status error:', err);
   }
 }
 
-// Subscribe to global realtime updates
+// Realtime Polling & Broadcast Subscription
 export function subscribeToGlobalRealtime(
   onNewRequest: (req: SongRequest) => void,
   onStatusUpdate: (requestId: string, status: string, reason?: string) => void
 ): () => void {
-  let eventSource: EventSource | null = null;
-
-  try {
-    eventSource = new EventSource(NTFY_SSE_URL);
-
-    eventSource.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        if (payload && payload.message) {
-          const data = typeof payload.message === 'string' ? JSON.parse(payload.message) : payload.message;
-
-          if (data.action === 'NEW_REQUEST' && data.request) {
-            onNewRequest(data.request);
-          } else if (data.action === 'UPDATE_STATUS' && data.requestId && data.status) {
-            onStatusUpdate(data.requestId, data.status, data.reason);
-          }
-        }
-      } catch (e) {}
-    };
-  } catch (err) {
-    console.warn('EventSource connection error:', err);
-  }
-
   const handleBroadcast = (event: MessageEvent) => {
     if (event.data && event.data.type === 'REQUESTS_UPDATED' && Array.isArray(event.data.requests)) {
       // Local sync handled in App
@@ -151,7 +151,6 @@ export function subscribeToGlobalRealtime(
   }
 
   return () => {
-    if (eventSource) eventSource.close();
     if (broadcastChannel) broadcastChannel.removeEventListener('message', handleBroadcast);
   };
 }

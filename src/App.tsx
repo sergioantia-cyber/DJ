@@ -18,7 +18,7 @@ import {
   broadcastNewRequestToCloud,
   broadcastStatusUpdateToCloud,
   subscribeToGlobalRealtime,
-  fetchHistoricalCloudRequests
+  fetchCloudRequests
 } from './services/realtimeSyncService';
 
 export function App() {
@@ -40,7 +40,7 @@ export function App() {
 
   const [songs] = useState(INITIAL_SONGS);
   
-  // Realtime request queue
+  // Realtime request queue with Supabase Cloud Integration
   const [requests, setRequests] = useState<SongRequest[]>(() => {
     return getLocalStoredRequests();
   });
@@ -78,28 +78,21 @@ export function App() {
     lastPing: new Date().toISOString()
   });
 
-  // 1. Initial Historical Cloud Recovery on Startup
+  // 1. Initial Supabase Cloud Sync on Mount & Polling Interval (Syncs every 1.5 seconds)
   useEffect(() => {
-    async function loadHistory() {
-      const recovered = await fetchHistoricalCloudRequests();
-      if (recovered && recovered.length > 0) {
-        setRequests(recovered);
+    async function syncSupabase() {
+      const cloudReqs = await fetchCloudRequests();
+      if (cloudReqs && Array.isArray(cloudReqs)) {
+        setRequests(cloudReqs);
       }
     }
-    loadHistory();
+    syncSupabase();
 
-    // Background Poll Interval as backup to guarantee 100% cloud sync across Vercel users
-    const pollInterval = setInterval(async () => {
-      const polled = await fetchHistoricalCloudRequests();
-      if (polled && polled.length > 0) {
-        setRequests(polled);
-      }
-    }, 2000);
-
-    return () => clearInterval(pollInterval);
+    const intervalId = setInterval(syncSupabase, 1500);
+    return () => clearInterval(intervalId);
   }, []);
 
-  // 2. GLOBAL REALTIME SSE SUBSCRIBER (Instant sub-second cross-device push listener)
+  // 2. Realtime Broadcast Listener
   useEffect(() => {
     const unsubscribe = subscribeToGlobalRealtime(
       (newCloudReq) => {
@@ -225,7 +218,7 @@ export function App() {
     setRequests(updatedRequests);
     saveLocalStoredRequests(updatedRequests);
 
-    // Broadcast globally across Vercel users via Unlimited SSE Relay
+    // Broadcast & Insert into Supabase Cloud Database
     broadcastNewRequestToCloud(newRequest);
 
     soundFx.playAirhorn();
@@ -253,7 +246,7 @@ export function App() {
     setRequests(updatedRequests);
     saveLocalStoredRequests(updatedRequests);
 
-    // Broadcast status update globally
+    // Broadcast status update to Supabase Cloud Database
     broadcastStatusUpdateToCloud(requestId, newStatus, reason);
   };
 
