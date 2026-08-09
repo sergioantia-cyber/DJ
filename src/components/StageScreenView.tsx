@@ -7,14 +7,17 @@ interface StageScreenViewProps {
 }
 
 export const StageScreenView: React.FC<StageScreenViewProps> = ({ requests }) => {
-  // Find currently playing request, or fallback to the newest active request
-  const currentSongReq =
-    requests.find((r) => r.status === 'playing') ||
-    requests.find((r) => r.status === 'sent_to_vdj' || r.status === 'accepted' || r.status === 'pending') ||
-    requests[0];
+  // EXCLUDE 'pending' requests from public Stage Screen display!
+  // Only display songs confirmed/accepted by the DJ (status: playing, accepted, sent_to_vdj, completed)
+  const confirmedRequests = requests.filter((r) => r.status !== 'pending' && r.status !== 'rejected');
 
-  const nextSongReq = requests.find(
-    (r) => r.id !== currentSongReq?.id && r.status !== 'rejected' && r.status !== 'completed'
+  const currentSongReq =
+    confirmedRequests.find((r) => r.status === 'playing') ||
+    confirmedRequests.find((r) => r.status === 'sent_to_vdj' || r.status === 'accepted') ||
+    confirmedRequests[0];
+
+  const nextSongReq = confirmedRequests.find(
+    (r) => r.id !== currentSongReq?.id && r.status !== 'completed'
   );
 
   const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
@@ -168,7 +171,8 @@ export const StageScreenView: React.FC<StageScreenViewProps> = ({ requests }) =>
       ) : (
         <div className="p-12 text-center space-y-4">
           <Disc3 className="w-16 h-16 text-pink-400 mx-auto animate-spin" />
-          <h3 className="text-2xl font-black text-white">Esperando la primera canción solicitada...</h3>
+          <h3 className="text-2xl font-black text-white">Esperando confirmación de canciones por parte del DJ...</h3>
+          <p className="text-slate-400 text-xs">Pide tu tema en la app y realiza tu transferencia Nequi / Bancolombia.</p>
         </div>
       )}
 

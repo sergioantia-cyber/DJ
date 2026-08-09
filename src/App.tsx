@@ -169,40 +169,19 @@ export function App() {
 
     const deviceId = getOrCreateDeviceId();
 
-    // Check if there is ALREADY a song currently playing
-    const currentlyPlayingSong = requests.find((r) => r.status === 'playing');
-
-    let initialStatus: RequestStatus = 'accepted';
-    if (!currentlyPlayingSong) {
-      // No song currently sounding -> Start playing immediately!
-      initialStatus = 'playing';
-    } else {
-      // A song is currently sounding -> Do NOT interrupt! Queue as accepted (Play Next if priority is play_now)
-      initialStatus = 'accepted';
-    }
-
+    // Requests start as PENDING for DJ verification!
     const newRequest: SongRequest = {
       ...newReqData,
       id: `req-${Date.now()}`,
       deviceId,
       createdAt: new Date().toISOString(),
-      status: initialStatus,
+      status: 'pending', // Shows ONLY in DJ Booth first!
       platformFeeCOP,
       djShareCOP,
       clubShareCOP,
     };
 
-    let updatedRequests: SongRequest[] = [];
-    if (newReqData.priority.id === 'play_now' && currentlyPlayingSong) {
-      // Insert right after the currently playing song (at index 1)
-      const playingIndex = requests.findIndex((r) => r.status === 'playing');
-      const copy = [...requests];
-      copy.splice(playingIndex + 1, 0, newRequest);
-      updatedRequests = copy;
-    } else {
-      updatedRequests = [newRequest, ...requests];
-    }
-
+    const updatedRequests = [newRequest, ...requests];
     setRequests(updatedRequests);
     saveCloudRequests(updatedRequests);
     soundFx.playAirhorn();
