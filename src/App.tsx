@@ -11,6 +11,7 @@ import { Lock, ShieldCheck, KeyRound, X } from 'lucide-react';
 import { INITIAL_SONGS, INITIAL_REQUESTS, DEFAULT_OWNER_CONFIG } from './data/mockDatabase';
 import { SongRequest, RequestStatus, VirtualDJConfig, OwnerConfig } from './types';
 import { soundFx } from './services/soundEffects';
+import { fetchCloudRequests, saveCloudRequests, getLocalStoredRequests } from './services/realtimeSyncService';
 
 export function App() {
   const queryParams = new URLSearchParams(window.location.search);
@@ -24,7 +25,12 @@ export function App() {
 
   const [activeTab, setActiveTab] = useState<'client' | 'dj' | 'owner' | 'stage' | 'bridge'>(urlRole || 'client');
   const [songs] = useState(INITIAL_SONGS);
-  const [requests, setRequests] = useState<SongRequest[]>(INITIAL_REQUESTS);
+  
+  // Realtime multi-device request queue
+  const [requests, setRequests] = useState<SongRequest[]>(() => {
+    const local = getLocalStoredRequests();
+    return local.length > 0 ? local : INITIAL_REQUESTS;
+  });
 
   const [ownerConfig, setOwnerConfig] = useState<OwnerConfig>(DEFAULT_OWNER_CONFIG);
   const [isTermsModalOpen, setIsTermsModalOpen] = useState<boolean>(false);
@@ -44,11 +50,23 @@ export function App() {
     connected: true,
     serverUrl: 'http://localhost',
     port: 8000,
-    autoAcceptThresholdCOP: 10000, // Instant auto-play for all requests
+    autoAcceptThresholdCOP: 10000,
     autoSyncToAutomix: true,
     sentCount: 2,
     lastPing: new Date().toISOString()
   });
+
+  // REALTIME CROSS-DEVICE POLLING SYNC (Syncs every 3 seconds across Vercel users)
+  useEffect(() => {
+    const syncInterval = setInterval(async () => {
+      const cloudReqs = await fetchCloudRequests();
+      if (cloudReqs && Array.isArray(cloudReqs)) {
+        setRequests(cloudReqs);
+      }
+    }, 3000);
+
+    return () => clearInterval(syncInterval);
+  }, []);
 
   const validRequests = requests.filter((r) => r.status !== 'rejected');
   const totalEarnedCOP = validRequests.reduce((sum, r) => sum + r.totalPaidCOP, 0);
@@ -144,7 +162,6 @@ export function App() {
     const djShareCOP = totalPaid * (ownerConfig.djSharePercent / 100);
     const clubShareCOP = totalPaid * (ownerConfig.clubSharePercent / 100);
 
-    // Instant auto-play and display on Stage Screen
     const newRequest: SongRequest = {
       ...newReqData,
       id: `req-${Date.now()}`,
@@ -155,30 +172,33 @@ export function App() {
       clubShareCOP,
     };
 
-    setRequests((prev) => [newRequest, ...prev]);
+    const updatedRequests = [newRequest, ...requests];
+    setRequests(updatedRequests);
+    saveCloudRequests(updatedRequests);
     soundFx.playAirhorn();
   };
 
   const handleUpdateRequestStatus = (requestId: string, newStatus: RequestStatus, reason?: string) => {
-    setRequests((prev) =>
-      prev.map((req) => {
-        if (req.id === requestId) {
-          const updated: SongRequest = {
-            ...req,
-            status: newStatus,
-            rejectionReason: reason,
-          };
-          if (newStatus === 'accepted' || newStatus === 'sent_to_vdj') {
-            updated.acceptedAt = new Date().toISOString();
-          }
-          if (newStatus === 'playing') {
-            updated.playedAt = new Date().toISOString();
-          }
-          return updated;
+    const updatedRequests = requests.map((req) => {
+      if (req.id === requestId) {
+        const updated: SongRequest = {
+          ...req,
+          status: newStatus,
+          rejectionReason: reason,
+        };
+        if (newStatus === 'accepted' || newStatus === 'sent_to_vdj') {
+          updated.acceptedAt = new Date().toISOString();
         }
-        return req;
-      })
-    );
+        if (newStatus === 'playing') {
+          updated.playedAt = new Date().toISOString();
+        }
+        return updated;
+      }
+      return req;
+    });
+
+    setRequests(updatedRequests);
+    saveCloudRequests(updatedRequests);
   };
 
   const handleUpdateOwnerConfig = (updatedFields: Partial<OwnerConfig>) => {
