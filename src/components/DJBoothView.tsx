@@ -1,16 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   CheckCircle2,
   XCircle,
   Play,
+  Pause,
+  SkipForward,
   Volume2,
+  VolumeX,
   DollarSign,
   Disc3,
   Cable,
   Check,
   Bell,
   AlertTriangle,
-  Music
+  Music,
+  Radio,
+  ExternalLink,
+  Smartphone,
+  Sliders
 } from 'lucide-react';
 import { SongRequest, RequestStatus, VirtualDJConfig, OwnerConfig } from '../types';
 import { soundFx } from '../services/soundEffects';
@@ -33,9 +40,15 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [rejectionModalReqId, setRejectionModalReqId] = useState<string | null>(null);
 
-  const pendingRequests = requests.filter((r) => r.status === 'pending');
-  const activeRequests = requests.filter((r) => r.status === 'accepted' || r.status === 'sent_to_vdj');
+  // Standalone Sound System Player State (When NO VirtualDJ PC is present)
+  const [soundSystemMode, setSoundSystemMode] = useState<'virtualdj' | 'web_player' | 'spotify'>('web_player');
+  const [isPlayingWebAudio, setIsPlayingWebAudio] = useState<boolean>(false);
+  const [currentPlayingReq, setCurrentPlayingReq] = useState<SongRequest | null>(null);
+  const [audioProgress, setAudioProgress] = useState<number>(0);
 
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const pendingRequests = requests.filter((r) => r.status === 'pending');
   const validRequests = requests.filter((r) => r.status !== 'rejected');
   const totalGrossCOP = validRequests.reduce((sum, r) => sum + r.totalPaidCOP, 0);
   const djEarnedCOP = validRequests.reduce((sum, r) => sum + r.djShareCOP, 0);
@@ -50,14 +63,56 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
     return true;
   });
 
+  // Handle Web Audio Playback (No VirtualDJ mode)
+  const handlePlaySongStandalone = (req: SongRequest) => {
+    setCurrentPlayingReq(req);
+    onUpdateRequestStatus(req.id, 'playing');
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+
+    if (req.song.previewUrl) {
+      const audio = new Audio(req.song.previewUrl);
+      audioRef.current = audio;
+      audio.play();
+      setIsPlayingWebAudio(true);
+
+      audio.ontimeupdate = () => {
+        if (audio.duration) {
+          setAudioProgress((audio.currentTime / audio.duration) * 100);
+        }
+      };
+
+      audio.onended = () => {
+        setIsPlayingWebAudio(false);
+        onUpdateRequestStatus(req.id, 'completed');
+        // Play next pending/accepted song automatically!
+        const next = requests.find((r) => (r.status === 'accepted' || r.status === 'pending') && r.id !== req.id);
+        if (next) {
+          handlePlaySongStandalone(next);
+        }
+      };
+    } else {
+      soundFx.playBassDrop();
+      setIsPlayingWebAudio(true);
+    }
+  };
+
+  const handleTogglePauseWebAudio = () => {
+    if (!audioRef.current) return;
+    if (isPlayingWebAudio) {
+      audioRef.current.pause();
+      setIsPlayingWebAudio(false);
+    } else {
+      audioRef.current.play();
+      setIsPlayingWebAudio(true);
+    }
+  };
+
   const handleAccept = (req: SongRequest) => {
     soundFx.playScratch();
     onUpdateRequestStatus(req.id, 'sent_to_vdj');
-  };
-
-  const handleSetPlaying = (req: SongRequest) => {
-    soundFx.playBassDrop();
-    onUpdateRequestStatus(req.id, 'playing');
   };
 
   const handleConfirmReject = (reason: string) => {
@@ -66,13 +121,107 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
     setRejectionModalReqId(null);
   };
 
+  const openInSpotifySearch = (songTitle: string, artist: string) => {
+    const query = encodeURIComponent(`${songTitle} ${artist}`);
+    window.open(`https://open.spotify.com/search/${query}`, '_blank');
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
       
+      {/* Sound Output Mode Switcher Banner (VirtualDJ vs Standalone Web Player vs Spotify) */}
+      <div className="glass-panel-neon p-5 rounded-3xl border border-cyan-500/40 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-300">
+              <Radio className="w-6 h-6 animate-pulse" />
+            </div>
+            <div>
+              <span className="text-[10px] font-black text-cyan-400 uppercase tracking-widest block">
+                Configuración del Sistema de Sonido del Club
+              </span>
+              <h3 className="text-lg font-extrabold text-white">¿Desde qué dispositivo sonará la música?</h3>
+            </div>
+          </div>
+
+          {/* Mode Selector Tabs */}
+          <div className="flex items-center bg-black/50 p-1.5 rounded-2xl border border-white/10 overflow-x-auto">
+            <button
+              onClick={() => setSoundSystemMode('web_player')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                soundSystemMode === 'web_player'
+                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+              <span>📱 Móvil / Bluetooth (Web Player)</span>
+            </button>
+
+            <button
+              onClick={() => setSoundSystemMode('virtualdj')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                soundSystemMode === 'virtualdj'
+                  ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Cable className="w-3.5 h-3.5" />
+              <span>💻 Laptop VirtualDJ</span>
+            </button>
+
+            <button
+              onClick={() => setSoundSystemMode('spotify')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                soundSystemMode === 'spotify'
+                  ? 'bg-emerald-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>🎧 Enlace Spotify</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Live Audio Deck for Standalone Web Player Mode (Phone / Tablet / AUX) */}
+        {soundSystemMode === 'web_player' && (
+          <div className="p-4 rounded-2xl bg-black/60 border border-purple-500/30 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-12 h-12 rounded-xl bg-purple-900/60 border border-purple-500/40 flex items-center justify-center flex-shrink-0">
+                <Disc3 className={`w-7 h-7 text-pink-400 ${isPlayingWebAudio ? 'animate-spin' : ''}`} />
+              </div>
+              <div className="min-w-0">
+                <span className="text-[10px] font-bold text-pink-400 uppercase tracking-widest block">
+                  Reproductor Directo a Altavoces / Bluetooth
+                </span>
+                <h4 className="font-extrabold text-white text-sm truncate">
+                  {currentPlayingReq ? currentPlayingReq.song.title : 'Esperando primera canción...'}
+                </h4>
+                <p className="text-xs text-slate-400 truncate">
+                  {currentPlayingReq ? `${currentPlayingReq.song.artist} • Pedido por ${currentPlayingReq.userName}` : 'Conecta este teléfono/tablet al AUX o Bluetooth del club'}
+                </p>
+              </div>
+            </div>
+
+            {/* Playback controls */}
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <button
+                disabled={!currentPlayingReq}
+                onClick={handleTogglePauseWebAudio}
+                className="w-11 h-11 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 text-white flex items-center justify-center shadow-lg shadow-purple-600/40 active:scale-95 disabled:opacity-40"
+              >
+                {isPlayingWebAudio ? <Pause className="w-5 h-5 fill-white" /> : <Play className="w-5 h-5 fill-white ml-0.5" />}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Top DJ Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
-        {/* DJ Share Net Earned (10%) */}
+        {/* DJ Share Net Earned */}
         <div className="glass-panel-neon rounded-2xl p-5 border border-purple-500/30 flex items-center justify-between">
           <div>
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tu Ganancia DJ (10%)</span>
@@ -106,20 +255,18 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
           </div>
         </div>
 
-        {/* VirtualDJ Status */}
+        {/* Output Mode Status */}
         <div className="glass-panel rounded-2xl p-5 border border-white/10 flex items-center justify-between">
           <div>
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">VirtualDJ Software</span>
-            <div className="text-base font-bold text-white mt-1 flex items-center gap-2">
-              <span className={`w-3 h-3 rounded-full ${vdjConfig.connected ? 'bg-emerald-400 animate-ping' : 'bg-rose-500'}`}></span>
-              <span className={vdjConfig.connected ? 'text-emerald-400' : 'text-rose-400'}>
-                {vdjConfig.connected ? 'CONECTADO' : 'OFFLINE'}
-              </span>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Modo de Sonido</span>
+            <div className="text-sm font-bold text-white mt-1 flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+              <span>{soundSystemMode === 'web_player' ? 'Móvil / Bluetooth' : soundSystemMode === 'virtualdj' ? 'VirtualDJ Deck' : 'Spotify Sync'}</span>
             </div>
-            <p className="text-[10px] text-slate-400 mt-1 font-mono">Puerto: localhost:{vdjConfig.port}</p>
+            <p className="text-[10px] text-slate-400 mt-1">Conectado a los altavoces del club</p>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
-            <Cable className="w-6 h-6" />
+            <Volume2 className="w-6 h-6" />
           </div>
         </div>
 
@@ -130,7 +277,7 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
             <div className="text-xs font-bold text-slate-200 mt-1">
               Si pago {'>='} ${vdjConfig.autoAcceptThresholdCOP.toLocaleString('es-CO')} COP
             </div>
-            <p className="text-[10px] text-purple-300 mt-1">Envía directo a VirtualDJ</p>
+            <p className="text-[10px] text-purple-300 mt-1">Auto-reproducir en altavoces</p>
           </div>
           <button
             onClick={onToggleAutoAccept}
@@ -176,7 +323,7 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
             <Disc3 className="w-7 h-7 text-pink-400 animate-spin-slow" />
             <div>
               <h3 className="text-xl font-extrabold text-white">Cola de Pedidos Nequi / Bancolombia</h3>
-              <p className="text-xs text-slate-400">Aprueba o envía directo a la lista Automix de VirtualDJ</p>
+              <p className="text-xs text-slate-400">Aprueba, pon a sonar en los altavoces o abre en Spotify</p>
             </div>
           </div>
 
@@ -184,7 +331,7 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
             {[
               { id: 'all', label: 'Todos' },
               { id: 'pending', label: 'Pendientes' },
-              { id: 'active', label: 'En Cola VDJ' },
+              { id: 'active', label: 'En Cola' },
               { id: 'playing', label: 'Sonando' },
               { id: 'rejected', label: 'Rechazados' },
             ].map((tab) => (
@@ -236,14 +383,25 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
               </div>
 
               <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+                
+                {/* Spotify quick link */}
+                <button
+                  onClick={() => openInSpotifySearch(req.song.title, req.song.artist)}
+                  className="px-3 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white font-bold text-xs flex items-center gap-1 border border-emerald-500/30"
+                  title="Abrir en Spotify"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Spotify</span>
+                </button>
+
                 {req.status === 'pending' && (
                   <>
                     <button
-                      onClick={() => handleAccept(req)}
-                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-lg"
+                      onClick={() => handlePlaySongStandalone(req)}
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-purple-600/30"
                     >
-                      <Check className="w-4 h-4" />
-                      <span>Aceptar & VDJ</span>
+                      <Play className="w-4 h-4 fill-white" />
+                      <span>Sonar en Altavoces</span>
                     </button>
                     <button
                       onClick={() => setRejectionModalReqId(req.id)}
@@ -256,11 +414,11 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
 
                 {(req.status === 'accepted' || req.status === 'sent_to_vdj') && (
                   <button
-                    onClick={() => handleSetPlaying(req)}
+                    onClick={() => handlePlaySongStandalone(req)}
                     className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xs flex items-center gap-1.5"
                   >
                     <Play className="w-4 h-4 fill-white" />
-                    <span>Poner a Sonar</span>
+                    <span>Sonar Ahora</span>
                   </button>
                 )}
 
