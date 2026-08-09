@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { ClientView } from './components/ClientView';
 import { DJBoothView } from './components/DJBoothView';
@@ -6,18 +6,31 @@ import { OwnerDashboardView } from './components/OwnerDashboardView';
 import { StageScreenView } from './components/StageScreenView';
 import { VirtualDJBridgeView } from './components/VirtualDJBridgeView';
 import { TermsAndConditionsModal } from './components/TermsAndConditionsModal';
+import { Lock, ShieldCheck, KeyRound, X } from 'lucide-react';
 
 import { INITIAL_SONGS, INITIAL_REQUESTS, DEFAULT_OWNER_CONFIG } from './data/mockDatabase';
 import { SongRequest, RequestStatus, VirtualDJConfig, OwnerConfig } from './types';
 import { soundFx } from './services/soundEffects';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'client' | 'dj' | 'owner' | 'stage' | 'bridge'>('client');
+  // Read URL parameters e.g. ?role=client or ?role=screen
+  const queryParams = new URLSearchParams(window.location.search);
+  const urlRole = queryParams.get('role') as 'client' | 'dj' | 'owner' | 'stage' | 'bridge' | null;
+
+  const [activeTab, setActiveTab] = useState<'client' | 'dj' | 'owner' | 'stage' | 'bridge'>(urlRole || 'client');
   const [songs] = useState(INITIAL_SONGS);
   const [requests, setRequests] = useState<SongRequest[]>(INITIAL_REQUESTS);
 
   const [ownerConfig, setOwnerConfig] = useState<OwnerConfig>(DEFAULT_OWNER_CONFIG);
   const [isTermsModalOpen, setIsTermsModalOpen] = useState<boolean>(false);
+
+  // Security PIN state for DJ and Owner portals
+  const [pinPromptRole, setPinPromptRole] = useState<'dj' | 'owner' | null>(null);
+  const [enteredPin, setEnteredPin] = useState<string>('');
+  const [pinError, setPinError] = useState<string>('');
+
+  const DJ_PIN = '1234';
+  const OWNER_PIN = '9999';
 
   const [vdjConfig, setVdjConfig] = useState<VirtualDJConfig>({
     connected: true,
@@ -33,10 +46,46 @@ export function App() {
   const totalEarnedCOP = validRequests.reduce((sum, r) => sum + r.totalPaidCOP, 0);
   const pendingCount = requests.filter((r) => r.status === 'pending').length;
 
-  const handleTabSwitch = (tab: 'client' | 'dj' | 'owner' | 'stage' | 'bridge') => {
+  const handleTabSwitchRequest = (tab: 'client' | 'dj' | 'owner' | 'stage' | 'bridge') => {
+    if (tab === 'dj') {
+      setPinPromptRole('dj');
+      setEnteredPin('');
+      setPinError('');
+      return;
+    }
+
+    if (tab === 'owner') {
+      setPinPromptRole('owner');
+      setEnteredPin('');
+      setPinError('');
+      return;
+    }
+
     setActiveTab(tab);
-    if (tab === 'owner' && !ownerConfig.hasAcceptedTerms) {
-      setIsTermsModalOpen(true);
+  };
+
+  const handleVerifyPin = () => {
+    if (pinPromptRole === 'dj') {
+      if (enteredPin === DJ_PIN) {
+        soundFx.playCoinChime();
+        setActiveTab('dj');
+        setPinPromptRole(null);
+      } else {
+        setPinError('PIN de Cabina DJ incorrecto (Por defecto: 1234)');
+        soundFx.playScratch();
+      }
+    } else if (pinPromptRole === 'owner') {
+      if (enteredPin === OWNER_PIN) {
+        soundFx.playCoinChime();
+        setActiveTab('owner');
+        setPinPromptRole(null);
+        if (!ownerConfig.hasAcceptedTerms) {
+          setIsTermsModalOpen(true);
+        }
+      } else {
+        setPinError('PIN de Administrador incorrecto (Por defecto: 9999)');
+        soundFx.playScratch();
+      }
     }
   };
 
@@ -54,7 +103,6 @@ export function App() {
   ) => {
     const totalPaid = newReqData.totalPaidCOP;
 
-    // Automatic 20% platform fee calculation
     const platformFeeCOP = totalPaid * (ownerConfig.platformFeePercent / 100);
     const djShareCOP = totalPaid * (ownerConfig.djSharePercent / 100);
     const clubShareCOP = totalPaid * (ownerConfig.clubSharePercent / 100);
@@ -120,10 +168,11 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-[#08080c] text-slate-100 flex flex-col font-['Outfit',sans-serif]">
-      {/* Top Navbar Header */}
+      
+      {/* Top Navbar Header with Role Switcher & Pin Security */}
       <Navbar
         activeTab={activeTab}
-        setActiveTab={handleTabSwitch}
+        setActiveTab={handleTabSwitchRequest}
         vdjConfig={vdjConfig}
         ownerConfig={ownerConfig}
         totalEarnedCOP={totalEarnedCOP}
@@ -176,6 +225,56 @@ export function App() {
         )}
       </main>
 
+      {/* PIN Security Modal for DJ / Owner Access */}
+      {pinPromptRole && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+          <div className="w-full max-w-sm glass-panel-neon rounded-3xl p-6 border border-purple-500/40 space-y-4 text-center">
+            
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2 text-xs font-bold text-pink-400 uppercase">
+                <KeyRound className="w-4 h-4" />
+                <span>Acceso Restringido por PIN</span>
+              </div>
+              <button onClick={() => setPinPromptRole(null)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-lg font-extrabold text-white">
+                {pinPromptRole === 'dj' ? 'Acceso a Cabina DJ' : 'Panel de Administración del Dueño'}
+              </h3>
+              <p className="text-xs text-slate-300">
+                {pinPromptRole === 'dj'
+                  ? 'Ingresa la clave de acceso del DJ (Por defecto: 1234)'
+                  : 'Ingresa la clave de acceso del Dueño (Por defecto: 9999)'}
+              </p>
+            </div>
+
+            <div>
+              <input
+                type="password"
+                maxLength={6}
+                value={enteredPin}
+                onChange={(e) => setEnteredPin(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleVerifyPin()}
+                placeholder="****"
+                className="w-full text-center tracking-[0.5em] font-mono text-2xl font-black py-3 rounded-2xl bg-slate-900 border border-white/10 text-white focus:border-pink-500 outline-none"
+                autoFocus
+              />
+              {pinError && <p className="text-xs text-rose-400 font-bold mt-2">{pinError}</p>}
+            </div>
+
+            <button
+              onClick={handleVerifyPin}
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 text-white font-extrabold text-xs shadow-lg shadow-purple-600/40"
+            >
+              Ingresar al Portal
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Mandatory Terms & Conditions Modal for Nightclub Owner */}
       <TermsAndConditionsModal
         isOpen={isTermsModalOpen}
@@ -183,21 +282,6 @@ export function App() {
         clubName={ownerConfig.clubName}
       />
 
-      {/* Bottom Bar Alert for Pending Requests */}
-      {pendingCount > 0 && activeTab !== 'dj' && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40">
-          <button
-            onClick={() => {
-              setActiveTab('dj');
-              soundFx.playAirhorn();
-            }}
-            className="px-6 py-3 rounded-full bg-gradient-to-r from-pink-600 via-purple-600 to-cyan-500 text-white font-extrabold text-xs shadow-2xl shadow-pink-500/50 flex items-center gap-2 animate-bounce border border-pink-400/40 hover:scale-105 transition-transform"
-          >
-            <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping"></span>
-            <span>¡Tienes {pendingCount} pedido(s) por Nequi/Bancolombia en la Cabina DJ!</span>
-          </button>
-        </div>
-      )}
     </div>
   );
 }
