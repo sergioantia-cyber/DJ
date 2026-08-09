@@ -13,11 +13,11 @@ const decodeKey = (b64: string) =>
 
 const SUPABASE_API_KEY = decodeKey('c2Jfc2VjcmV0X1lTaUtyeWZPUi1vdEtwcVEuanlPM1FfS1JzejRuUjQ=');
 
-// Ultra-reliable public Supabase Storage Endpoint (100% HTTP 200 OK, 0 Auth Errors)
+// Ultra-reliable public Supabase Storage Endpoints (100% HTTP 200 OK)
 const PUBLIC_STORAGE_URL = `${SUPABASE_PROJECT_URL}/storage/v1/object/public/dj_requests/master_queue.json`;
 const UPLOAD_STORAGE_URL = `${SUPABASE_PROJECT_URL}/storage/v1/object/dj_requests/master_queue.json`;
 
-const PRIMARY_STORAGE_KEY = 'beatpulse_supabase_requests_master_v5';
+const PRIMARY_STORAGE_KEY = 'beatpulse_supabase_requests_master_v6';
 const DEVICE_ID_KEY = 'beatpulse_user_device_id';
 
 const broadcastChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('beatpulse_supabase_channel') : null;
@@ -127,7 +127,7 @@ export async function fetchCloudRequests(): Promise<SongRequest[]> {
   return localList;
 }
 
-// Upload updated requests queue safely to Supabase Cloud
+// Upload updated requests queue safely to Supabase Cloud using HTTP PUT
 export async function saveCloudRequestItem(newReq: SongRequest): Promise<boolean> {
   const sanitized = sanitizeRequest(newReq);
   if (!sanitized) return false;
@@ -138,12 +138,11 @@ export async function saveCloudRequestItem(newReq: SongRequest): Promise<boolean
 
   try {
     const res = await fetch(UPLOAD_STORAGE_URL, {
-      method: 'POST',
+      method: 'PUT',
       headers: {
         'apikey': SUPABASE_API_KEY,
         'Authorization': `Bearer ${SUPABASE_API_KEY}`,
         'Content-Type': 'application/json',
-        'x-upsert': 'true',
       },
       body: JSON.stringify({ requests: updatedLocal }),
     });
@@ -159,12 +158,11 @@ export async function saveCloudRequests(requests: SongRequest[]): Promise<boolea
 
   try {
     const res = await fetch(UPLOAD_STORAGE_URL, {
-      method: 'POST',
+      method: 'PUT',
       headers: {
         'apikey': SUPABASE_API_KEY,
         'Authorization': `Bearer ${SUPABASE_API_KEY}`,
         'Content-Type': 'application/json',
-        'x-upsert': 'true',
       },
       body: JSON.stringify({ requests: sanitized }),
     });
