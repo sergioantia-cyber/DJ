@@ -17,7 +17,8 @@ import {
   getOrCreateDeviceId,
   broadcastNewRequestToCloud,
   broadcastStatusUpdateToCloud,
-  subscribeToGlobalRealtime
+  subscribeToGlobalRealtime,
+  fetchHistoricalCloudRequests
 } from './services/realtimeSyncService';
 
 export function App() {
@@ -76,7 +77,18 @@ export function App() {
     lastPing: new Date().toISOString()
   });
 
-  // GLOBAL REALTIME SSE SUBSCRIBER (Instant cross-device sync across internet)
+  // 1. Initial Historical Cloud Recovery on Startup
+  useEffect(() => {
+    async function loadHistory() {
+      const recovered = await fetchHistoricalCloudRequests();
+      if (recovered && recovered.length > 0) {
+        setRequests(recovered);
+      }
+    }
+    loadHistory();
+  }, []);
+
+  // 2. GLOBAL REALTIME SSE SUBSCRIBER (Instant cross-device push listener)
   useEffect(() => {
     const unsubscribe = subscribeToGlobalRealtime(
       (newCloudReq) => {
