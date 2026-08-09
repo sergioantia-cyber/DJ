@@ -17,6 +17,7 @@ import {
   getOrCreateDeviceId,
   fetchCloudRequests,
   saveCloudRequests,
+  saveCloudRequestItem,
   subscribeToGlobalRealtime
 } from './services/realtimeSyncService';
 
@@ -200,7 +201,9 @@ export function App() {
 
     const updatedRequests = [newRequest, ...requests];
     setRequests(updatedRequests);
-    saveCloudRequests(updatedRequests);
+
+    // Save individual request item to Supabase Postgres Table
+    saveCloudRequestItem(newRequest);
 
     soundFx.playAirhorn();
   };
@@ -219,6 +222,8 @@ export function App() {
         if (newStatus === 'playing') {
           updated.playedAt = new Date().toISOString();
         }
+        // Sync updated item to Supabase Postgres Table
+        saveCloudRequestItem(updated);
         return updated;
       }
       return req;

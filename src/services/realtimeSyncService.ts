@@ -13,10 +13,11 @@ const decodeKey = (b64: string) =>
 
 const SUPABASE_API_KEY = decodeKey('c2Jfc2VjcmV0X1lTaUtyeWZPUi1vdEtwcVEuanlPM1FfS1JzejRuUjQ=');
 
-const PUBLIC_JSON_URL = `${SUPABASE_PROJECT_URL}/storage/v1/object/public/dj_requests/master_queue.json`;
-const UPLOAD_JSON_URL = `${SUPABASE_PROJECT_URL}/storage/v1/object/dj_requests/master_queue.json`;
+const REST_TABLE_URL = `${SUPABASE_PROJECT_URL}/rest/v1/song_requests`;
+const PUBLIC_STORAGE_URL = `${SUPABASE_PROJECT_URL}/storage/v1/object/public/dj_requests/master_queue.json`;
+const UPLOAD_STORAGE_URL = `${SUPABASE_PROJECT_URL}/storage/v1/object/dj_requests/master_queue.json`;
 
-const PRIMARY_STORAGE_KEY = 'beatpulse_supabase_requests_master_v2';
+const PRIMARY_STORAGE_KEY = 'beatpulse_supabase_requests_master_v3';
 const DEVICE_ID_KEY = 'beatpulse_user_device_id';
 
 const broadcastChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('beatpulse_supabase_channel') : null;
@@ -106,28 +107,104 @@ export function mergeRequests(local: SongRequest[], remote: SongRequest[]): Song
   );
 }
 
+// Fetch master requests queue from Supabase Cloud Table & Storage Backup
 export async function fetchCloudRequests(): Promise<SongRequest[]> {
   const localList = getLocalStoredRequests();
+  const remoteList: SongRequest[] = [];
 
+  // 1. Try fetching from Supabase Postgres Table song_requests
   try {
-    const res = await fetch(`${PUBLIC_JSON_URL}?t=${Date.now()}`, {
+    const tableRes = await fetch(`${REST_TABLE_URL}?select=*&order=created_at.desc`, {
+      headers: {
+        'apikey': SUPABASE_API_KEY,
+        'Authorization': `Bearer ${SUPABASE_API_KEY}`,
+      },
       cache: 'no-store'
     });
 
-    if (res.ok) {
-      const data = await res.json();
-      if (data && Array.isArray(data.requests)) {
-        const sanitizedRemote = data.requests.map(sanitizeRequest).filter((r): r is SongRequest => r !== null);
-        const merged = mergeRequests(localList, sanitizedRemote);
-        saveLocalStoredRequests(merged);
-        return merged;
+    if (tableRes.ok) {
+      const rows = await tableRes.json();
+      if (Array.isArray(rows)) {
+        for (const row of rows) {
+          const reqObj = row.payload || row;
+          if (reqObj) {
+            reqObj.status = row.status || reqObj.status;
+            const sanitized = sanitizeRequest(reqObj);
+            if (sanitized) remoteList.push(sanitized);
+          }
+        }
       }
     }
-  } catch (err) {
-    console.warn('Supabase cloud fetch error:', err);
+  } catch (e) {}
+
+  // 2. Fallback to Storage JSON if table is empty
+  if (remoteList.length === 0) {
+    try {
+      const storageRes = await fetch(`${PUBLIC_STORAGE_URL}?t=${Date.now()}`, { cache: 'no-store' });
+      if (storageRes.ok) {
+        const data = await storageRes.json();
+        if (data && Array.isArray(data.requests)) {
+          for (const req of data.requests) {
+            const sanitized = sanitizeRequest(req);
+            if (sanitized) remoteList.push(sanitized);
+          }
+        }
+      }
+    } catch (e) {}
   }
 
-  return localList;
+  const merged = mergeRequests(localList, remoteList);
+  saveLocalStoredRequests(merged);
+  return merged;
+}
+
+// Insert or update individual request row into Supabase Postgres Table & Storage
+export async function saveCloudRequestItem(newReq: SongRequest): Promise<boolean> {
+  const sanitized = sanitizeRequest(newReq);
+  if (!sanitized) return false;
+
+  const currentLocal = getLocalStoredRequests();
+  const updatedLocal = mergeRequests(currentLocal, [sanitized]);
+  saveLocalStoredRequests(updatedLocal);
+
+  let success = false;
+
+  // 1. Insert into Supabase Postgres Table
+  try {
+    const tableRes = await fetch(REST_TABLE_URL, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_API_KEY,
+        'Authorization': `Bearer ${SUPABASE_API_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify({
+        id: sanitized.id,
+        device_id: sanitized.deviceId,
+        status: sanitized.status,
+        payload: sanitized,
+        created_at: sanitized.createdAt,
+      }),
+    });
+    if (tableRes.ok) success = true;
+  } catch (e) {}
+
+  // 2. Also sync to Storage JSON file as backup
+  try {
+    await fetch(UPLOAD_STORAGE_URL, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_API_KEY,
+        'Authorization': `Bearer ${SUPABASE_API_KEY}`,
+        'Content-Type': 'application/json',
+        'x-upsert': 'true',
+      },
+      body: JSON.stringify({ requests: updatedLocal }),
+    });
+  } catch (e) {}
+
+  return success;
 }
 
 export async function saveCloudRequests(requests: SongRequest[]): Promise<boolean> {
@@ -135,7 +212,7 @@ export async function saveCloudRequests(requests: SongRequest[]): Promise<boolea
   saveLocalStoredRequests(sanitized);
 
   try {
-    const res = await fetch(UPLOAD_JSON_URL, {
+    const res = await fetch(UPLOAD_STORAGE_URL, {
       method: 'POST',
       headers: {
         'apikey': SUPABASE_API_KEY,
@@ -148,7 +225,6 @@ export async function saveCloudRequests(requests: SongRequest[]): Promise<boolea
 
     return res.ok;
   } catch (err) {
-    console.warn('Supabase cloud upload error:', err);
     return false;
   }
 }
