@@ -10,8 +10,6 @@ import {
   Smartphone,
   CreditCard,
   MessageSquare,
-  Volume2,
-  VolumeX,
   TrendingUp,
   X,
   Radio,
@@ -53,10 +51,6 @@ export const ClientView: React.FC<ClientViewProps> = ({
   const [isSearchingWeb, setIsSearchingWeb] = useState<boolean>(false);
 
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
-
-  // Audio player state for 30s preview
-  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
-  const [activeAudioElement, setActiveAudioElement] = useState<HTMLAudioElement | null>(null);
 
   // Form states for request modal
   const [userName, setUserName] = useState<string>('Alex M.');
@@ -126,41 +120,8 @@ export const ClientView: React.FC<ClientViewProps> = ({
   };
 
   const handleOpenOrderModal = (song: Song) => {
-    if (activeAudioElement) {
-      activeAudioElement.pause();
-      setActiveAudioElement(null);
-      setPlayingAudioId(null);
-    }
     setSelectedSong(song);
     soundFx.playScratch();
-  };
-
-  const handleToggleAudioPreview = (song: Song) => {
-    if (playingAudioId === song.id && activeAudioElement) {
-      activeAudioElement.pause();
-      setActiveAudioElement(null);
-      setPlayingAudioId(null);
-      return;
-    }
-
-    if (activeAudioElement) {
-      activeAudioElement.pause();
-    }
-
-    if (song.previewUrl) {
-      const audio = new Audio(song.previewUrl);
-      audio.play();
-      setActiveAudioElement(audio);
-      setPlayingAudioId(song.id);
-      audio.onended = () => {
-        setPlayingAudioId(null);
-        setActiveAudioElement(null);
-      };
-    } else {
-      soundFx.playScratch();
-      setPlayingAudioId(song.id);
-      setTimeout(() => setPlayingAudioId(null), 4000);
-    }
   };
 
   const handlePaymentSuccess = (paymentMethod: PaymentMethodType) => {
@@ -293,7 +254,7 @@ export const ClientView: React.FC<ClientViewProps> = ({
             </div>
           </div>
 
-          {/* Song Grid */}
+          {/* Song Grid (Clean view: No local phone playback button) */}
           {displayedSongs.length === 0 && !isSearchingWeb ? (
             <div className="p-12 text-center text-slate-400 glass-panel rounded-3xl space-y-2">
               <Music className="w-10 h-10 mx-auto opacity-40 animate-bounce" />
@@ -307,28 +268,11 @@ export const ClientView: React.FC<ClientViewProps> = ({
                   key={song.id}
                   className="glass-panel rounded-2xl p-4 flex items-center justify-between gap-4 glass-card-hover border border-white/5 group"
                 >
-                  <div className="relative flex-shrink-0">
-                    <img
-                      src={song.albumCover}
-                      alt={song.title}
-                      className="w-16 h-16 rounded-xl object-cover shadow-md group-hover:scale-105 transition-transform"
-                    />
-                    <button
-                      onClick={() => handleToggleAudioPreview(song)}
-                      className={`absolute inset-0 rounded-xl flex items-center justify-center transition-all ${
-                        playingAudioId === song.id
-                          ? 'bg-pink-600/80 text-white'
-                          : 'bg-black/40 opacity-0 group-hover:opacity-100 text-white hover:bg-black/60'
-                      }`}
-                      title="Escuchar 30s de vista previa real"
-                    >
-                      {playingAudioId === song.id ? (
-                        <VolumeX className="w-6 h-6 animate-pulse text-white" />
-                      ) : (
-                        <Volume2 className="w-6 h-6 text-white" />
-                      )}
-                    </button>
-                  </div>
+                  <img
+                    src={song.albumCover}
+                    alt={song.title}
+                    className="w-16 h-16 rounded-xl object-cover shadow-md flex-shrink-0 group-hover:scale-105 transition-transform"
+                  />
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -348,11 +292,6 @@ export const ClientView: React.FC<ClientViewProps> = ({
                         {song.genre}
                       </span>
                       <span className="text-slate-400 font-mono">{song.bpm} BPM</span>
-                      {song.previewUrl && (
-                        <span className="text-[10px] text-cyan-400 font-bold flex items-center gap-0.5">
-                          <Volume2 className="w-3 h-3" /> Audio 30s
-                        </span>
-                      )}
                     </div>
                   </div>
 
@@ -370,7 +309,7 @@ export const ClientView: React.FC<ClientViewProps> = ({
         </>
       )}
 
-      {/* MY REQUESTS HISTORICAL RADAR (PERSISTENT DEVICE IDENTIFIER) */}
+      {/* MY REQUESTS HISTORICAL RADAR */}
       {activeTab === 'my_requests' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
