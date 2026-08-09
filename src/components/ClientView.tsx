@@ -17,13 +17,14 @@ import {
   Radio,
   Globe,
   Loader2,
-  Tv
+  Tv,
+  PhoneCall
 } from 'lucide-react';
 import { Song, PriorityOption, Genre, SongRequest, OwnerConfig, PaymentMethodType } from '../types';
 import { INITIAL_PRIORITY_OPTIONS } from '../data/mockDatabase';
 import { NequiBancolombiaPaymentModal } from './NequiBancolombiaPaymentModal';
 import { StageScreenView } from './StageScreenView';
-import { searchLiveWebMusic } from '../services/musicSearchService';
+import { searchLiveWebMusic, fetchDefaultTopClubHits } from '../services/musicSearchService';
 import { soundFx } from '../services/soundEffects';
 
 interface ClientViewProps {
@@ -42,6 +43,7 @@ export const ClientView: React.FC<ClientViewProps> = ({
   const [selectedGenre, setSelectedGenre] = useState<string>('Todos');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [searchResults, setSearchResults] = useState<Song[]>([]);
+  const [defaultHits, setDefaultHits] = useState<Song[]>([]);
   const [isSearchingWeb, setIsSearchingWeb] = useState<boolean>(false);
 
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
@@ -63,6 +65,17 @@ export const ClientView: React.FC<ClientViewProps> = ({
 
   const genresList = ['Todos', 'Reggaeton', 'Electro / House', 'Techno & EDM', 'Salsa & Bachata', 'Trap & Urban', 'Pop Hits'];
 
+  // Initial load of real top hits from iTunes API
+  useEffect(() => {
+    async function loadHits() {
+      setIsSearchingWeb(true);
+      const hits = await fetchDefaultTopClubHits();
+      setDefaultHits(hits);
+      setIsSearchingWeb(false);
+    }
+    loadHits();
+  }, []);
+
   // Live Web Search from iTunes API
   useEffect(() => {
     if (!searchQuery.trim()) {
@@ -81,9 +94,10 @@ export const ClientView: React.FC<ClientViewProps> = ({
     return () => clearTimeout(timeoutId);
   }, [searchQuery]);
 
-  const displayedSongs = searchQuery.trim()
-    ? searchResults
-    : songs.filter((song) => selectedGenre === 'Todos' || song.genre === selectedGenre);
+  const rawDisplayedSongs = searchQuery.trim() ? searchResults : defaultHits;
+  const displayedSongs = rawDisplayedSongs.filter(
+    (song) => selectedGenre === 'Todos' || song.genre === selectedGenre
+  );
 
   const getBasePriceCOP = (priorityId: string) => {
     if (ownerConfig.pricingMode === 'flat_single') {
@@ -181,7 +195,7 @@ export const ClientView: React.FC<ClientViewProps> = ({
             </p>
           </div>
 
-          {/* Customer Tabs Switcher: Catalog vs My Requests vs Stage Screen */}
+          {/* Customer Tabs Switcher */}
           <div className="flex items-center bg-black/40 p-1.5 rounded-2xl border border-white/10 w-full sm:w-auto overflow-x-auto">
             <button
               onClick={() => setActiveTab('catalog')}
@@ -250,36 +264,29 @@ export const ClientView: React.FC<ClientViewProps> = ({
               ) : null}
             </div>
 
-            {searchQuery ? (
-              <div className="flex items-center gap-1.5 text-xs text-pink-300 font-semibold px-2">
-                <Globe className="w-4 h-4 text-cyan-400 animate-pulse" />
-                <span>Buscando en vivo en la biblioteca web global (Apple Music / iTunes API)...</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-                {genresList.map((genre) => (
-                  <button
-                    key={genre}
-                    onClick={() => setSelectedGenre(genre)}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                      selectedGenre === genre
-                        ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md'
-                        : 'bg-[#141422] text-slate-400 hover:text-white border border-white/5'
-                    }`}
-                  >
-                    {genre}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+              {genresList.map((genre) => (
+                <button
+                  key={genre}
+                  onClick={() => setSelectedGenre(genre)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                    selectedGenre === genre
+                      ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md'
+                      : 'bg-[#141422] text-slate-400 hover:text-white border border-white/5'
+                  }`}
+                >
+                  {genre}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Song Grid */}
           {displayedSongs.length === 0 && !isSearchingWeb ? (
             <div className="p-12 text-center text-slate-400 glass-panel rounded-3xl space-y-2">
               <Music className="w-10 h-10 mx-auto opacity-40 animate-bounce" />
-              <p className="font-bold text-white">No se encontraron resultados para "{searchQuery}"</p>
-              <p className="text-xs text-slate-400">Intenta buscando por nombre de artista o título de canción.</p>
+              <p className="font-bold text-white">No se encontraron canciones</p>
+              <p className="text-xs text-slate-400">Intenta escribiendo el nombre de tu artista favorito en el buscador.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -352,47 +359,53 @@ export const ClientView: React.FC<ClientViewProps> = ({
       )}
 
       {activeTab === 'my_requests' && (
-        /* My Requests Radar */
         <div className="space-y-4">
           <h3 className="text-lg font-bold text-white flex items-center gap-2">
             <Radio className="w-5 h-5 text-pink-400 animate-pulse" />
             <span>Mis Solicitudes de Música</span>
           </h3>
 
-          {userRequests.map((req) => (
-            <div key={req.id} className="glass-panel-neon rounded-3xl p-5 border border-purple-500/30 space-y-3">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <img src={req.song.albumCover} alt={req.song.title} className="w-14 h-14 rounded-2xl object-cover" />
-                  <div>
-                    <h4 className="font-bold text-white text-base">{req.song.title}</h4>
-                    <p className="text-xs text-slate-400">{req.song.artist} • ${req.totalPaidCOP.toLocaleString('es-CO')} COP</p>
-                  </div>
-                </div>
-
-                <span className={`px-3 py-1 rounded-full text-xs font-extrabold ${
-                  req.status === 'playing' ? 'bg-pink-500 text-white animate-pulse' : 'bg-emerald-500/20 text-emerald-300'
-                }`}>
-                  {req.status === 'pending' && '⏳ Esperando DJ'}
-                  {req.status === 'accepted' && '✅ Aprobado'}
-                  {req.status === 'sent_to_vdj' && '⚡ En VirtualDJ'}
-                  {req.status === 'playing' && '🎵 SONANDO AHORA'}
-                </span>
-              </div>
+          {userRequests.length === 0 ? (
+            <div className="glass-panel rounded-3xl p-8 text-center space-y-2 border border-white/10">
+              <Music className="w-10 h-10 text-slate-600 mx-auto animate-bounce" />
+              <p className="text-white font-bold">Aún no has solicitado ninguna canción</p>
+              <p className="text-slate-400 text-xs">Busca tu tema favorito y envíalo con Nequi o Bancolombia.</p>
             </div>
-          ))}
+          ) : (
+            userRequests.map((req) => (
+              <div key={req.id} className="glass-panel-neon rounded-3xl p-5 border border-purple-500/30 space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <img src={req.song.albumCover} alt={req.song.title} className="w-14 h-14 rounded-2xl object-cover" />
+                    <div>
+                      <h4 className="font-bold text-white text-base">{req.song.title}</h4>
+                      <p className="text-xs text-slate-400">{req.song.artist} • ${req.totalPaidCOP.toLocaleString('es-CO')} COP</p>
+                    </div>
+                  </div>
+
+                  <span className={`px-3 py-1 rounded-full text-xs font-extrabold ${
+                    req.status === 'playing' ? 'bg-pink-500 text-white animate-pulse' : 'bg-emerald-500/20 text-emerald-300'
+                  }`}>
+                    {req.status === 'pending' && '⏳ Esperando DJ'}
+                    {req.status === 'accepted' && '✅ Aprobado'}
+                    {req.status === 'sent_to_vdj' && '⚡ En VirtualDJ'}
+                    {req.status === 'playing' && '🎵 SONANDO AHORA'}
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       )}
 
       {activeTab === 'stage_screen' && (
-        /* Embedded Live Stage Screen Visualizer for Customers */
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <Tv className="w-5 h-5 text-cyan-400 animate-pulse" />
               <span>Pantalla en Vivo del Club</span>
             </h3>
-            <span className="text-xs text-slate-400">Transmisión en tiempo real desde la cabina</span>
+            <span className="text-xs text-slate-400">Transmisión en tiempo real</span>
           </div>
 
           <StageScreenView requests={userRequests.length > 0 ? userRequests : []} />
@@ -555,6 +568,25 @@ export const ClientView: React.FC<ClientViewProps> = ({
           onConfirmSuccess={handlePaymentSuccess}
         />
       )}
+
+      {/* Subtle Developer Contact Footer */}
+      <footer className="pt-8 pb-4 border-t border-white/5 text-center text-[11px] text-slate-500 font-medium space-y-1">
+        <p>
+          Desarrollado por <strong className="text-slate-300">BeatPulse DJ Platform</strong>
+        </p>
+        <p className="flex items-center justify-center gap-1">
+          <PhoneCall className="w-3 h-3 text-pink-400" />
+          <span>Soporte / Contacto Desarrollador:</span>
+          <a
+            href="https://wa.me/573227949751"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-pink-400 font-bold hover:underline ml-0.5"
+          >
+            +57 322 794 9751
+          </a>
+        </p>
+      </footer>
 
     </div>
   );
