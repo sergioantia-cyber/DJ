@@ -17,8 +17,7 @@ import {
   getOrCreateDeviceId,
   fetchCloudRequests,
   saveCloudRequestItem,
-  updateCloudRequestStatus,
-  deleteCloudRequestItem,
+  saveCloudRequests,
   subscribeToGlobalRealtime
 } from './services/realtimeSyncService';
 
@@ -48,7 +47,7 @@ export function App() {
 
   const [songs] = useState(INITIAL_SONGS);
   
-  // Realtime request queue with Supabase Postgres Cloud Database
+  // Realtime request queue with Supabase Cloud Integration
   const [requests, setRequests] = useState<SongRequest[]>(() => {
     return getLocalStoredRequests();
   });
@@ -86,17 +85,17 @@ export function App() {
     lastPing: new Date().toISOString()
   });
 
-  // 1. Supabase Postgres Cloud Sync on Mount & Polling Interval (Syncs every 1.5 seconds)
+  // 1. Supabase Cloud Sync on Mount & Polling Interval (Syncs every 1.5 seconds)
   useEffect(() => {
-    async function syncSupabasePostgres() {
+    async function syncSupabaseStorage() {
       const cloudReqs = await fetchCloudRequests();
       if (cloudReqs && Array.isArray(cloudReqs)) {
         setRequests(cloudReqs);
       }
     }
-    syncSupabasePostgres();
+    syncSupabaseStorage();
 
-    const intervalId = setInterval(syncSupabasePostgres, 1500);
+    const intervalId = setInterval(syncSupabaseStorage, 1500);
     return () => clearInterval(intervalId);
   }, []);
 
@@ -223,7 +222,7 @@ export function App() {
     const updatedRequests = [newRequest, ...requests];
     setRequests(updatedRequests);
 
-    // Save individual request row directly to Supabase Postgres Database Table
+    // Save individual request item directly to Supabase Storage JSON Cloud
     saveCloudRequestItem(newRequest);
 
     soundFx.playAirhorn();
@@ -250,18 +249,18 @@ export function App() {
 
     setRequests(updatedRequests);
 
-    // Update status in Supabase Postgres Database Table
-    updateCloudRequestStatus(requestId, newStatus, reason);
+    // Save updated status list directly to Supabase Storage JSON Cloud
+    saveCloudRequests(updatedRequests);
   };
 
-  // Permanently delete a request from queue and Supabase Postgres Table
+  // Permanently delete a request from queue and Supabase Storage Cloud
   const handleDeleteRequest = (requestId: string) => {
     soundFx.playScratch();
     const updatedRequests = requests.filter((r) => r.id !== requestId);
     setRequests(updatedRequests);
     
-    // Delete row from Supabase Postgres Database Table
-    deleteCloudRequestItem(requestId);
+    // Save updated list directly to Supabase Storage JSON Cloud
+    saveCloudRequests(updatedRequests);
   };
 
   const handleUpdateOwnerConfig = (updatedFields: Partial<OwnerConfig>) => {
