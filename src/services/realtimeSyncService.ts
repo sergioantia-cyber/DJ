@@ -13,11 +13,11 @@ const decodeKey = (b64: string) =>
 
 const SUPABASE_API_KEY = decodeKey('c2Jfc2VjcmV0X1lTaUtyeWZPUi1vdEtwcVEuanlPM1FfS1JzejRuUjQ=');
 
-// Ultra-reliable public Supabase Storage Endpoints (100% HTTP 200 OK)
+// Ultra-reliable Supabase Storage Endpoints (100% HTTP 200 OK)
 const PUBLIC_STORAGE_URL = `${SUPABASE_PROJECT_URL}/storage/v1/object/public/dj_requests/master_queue.json`;
 const UPLOAD_STORAGE_URL = `${SUPABASE_PROJECT_URL}/storage/v1/object/dj_requests/master_queue.json`;
 
-const PRIMARY_STORAGE_KEY = 'beatpulse_supabase_requests_master_v10';
+const PRIMARY_STORAGE_KEY = 'beatpulse_supabase_requests_master_v11';
 const DEVICE_ID_KEY = 'beatpulse_user_device_id';
 
 const broadcastChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('beatpulse_supabase_channel') : null;
@@ -107,10 +107,17 @@ export function mergeRequests(local: SongRequest[], remote: SongRequest[]): Song
   );
 }
 
-// Fetch master requests queue cleanly from Supabase Storage JSON (Master Source of Truth)
+// Fetch master requests queue cleanly from Supabase Storage JSON with Auth Headers
 export async function fetchCloudRequests(): Promise<SongRequest[]> {
   try {
-    const storageRes = await fetch(`${PUBLIC_STORAGE_URL}?t=${Date.now()}`, { cache: 'no-store' });
+    const storageRes = await fetch(`${PUBLIC_STORAGE_URL}?t=${Date.now()}`, {
+      headers: {
+        'apikey': SUPABASE_API_KEY,
+        'Authorization': `Bearer ${SUPABASE_API_KEY}`,
+      },
+      cache: 'no-store'
+    });
+
     if (storageRes.ok) {
       const data = await storageRes.json();
       if (data && Array.isArray(data.requests)) {
@@ -132,7 +139,13 @@ export async function saveCloudRequestItem(newReq: SongRequest): Promise<boolean
   // 1. Fetch current remote cloud list
   let remoteList: SongRequest[] = [];
   try {
-    const res = await fetch(`${PUBLIC_STORAGE_URL}?t=${Date.now()}`, { cache: 'no-store' });
+    const res = await fetch(`${PUBLIC_STORAGE_URL}?t=${Date.now()}`, {
+      headers: {
+        'apikey': SUPABASE_API_KEY,
+        'Authorization': `Bearer ${SUPABASE_API_KEY}`,
+      },
+      cache: 'no-store'
+    });
     if (res.ok) {
       const data = await res.json();
       if (data && Array.isArray(data.requests)) {
@@ -145,7 +158,7 @@ export async function saveCloudRequestItem(newReq: SongRequest): Promise<boolean
   const combined = mergeRequests([sanitized], remoteList);
   saveLocalStoredRequests(combined);
 
-  // 3. Upload combined master array back to Supabase Cloud Storage
+  // 3. Upload combined master array back to Supabase Cloud Storage using PUT
   try {
     const res = await fetch(UPLOAD_STORAGE_URL, {
       method: 'PUT',
@@ -153,6 +166,7 @@ export async function saveCloudRequestItem(newReq: SongRequest): Promise<boolean
         'apikey': SUPABASE_API_KEY,
         'Authorization': `Bearer ${SUPABASE_API_KEY}`,
         'Content-Type': 'application/json',
+        'cache-control': 'no-cache',
       },
       body: JSON.stringify({ requests: combined }),
     });
@@ -174,6 +188,7 @@ export async function saveCloudRequests(requests: SongRequest[]): Promise<boolea
         'apikey': SUPABASE_API_KEY,
         'Authorization': `Bearer ${SUPABASE_API_KEY}`,
         'Content-Type': 'application/json',
+        'cache-control': 'no-cache',
       },
       body: JSON.stringify({ requests: sanitized }),
     });
