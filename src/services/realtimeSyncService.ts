@@ -11,12 +11,14 @@ const decodeKey = (b64: string) =>
     ? window.atob(b64)
     : Buffer.from(b64, 'base64').toString('utf-8');
 
-const SUPABASE_API_KEY = decodeKey('c2Jfc2VjcmV0X1lTaUtyeWZPUi1vdEtwcVEuanlPM1FfS1JzejRuUjQ=');
+// Official Supabase Anon / Publishable API Key
+const SUPABASE_PUB_KEY = decodeKey('c2JfcHVibGlzaGFibGVfbzR1emhMV09NVm9nc3VkSzJGM1VmQV9Gd2Q0WEJOYg==');
+const SUPABASE_SEC_KEY = decodeKey('c2Jfc2VjcmV0X1lTaUtyeWZPUi1vdEtwcVEuanlPM1FfS1JzejRuUjQ=');
 
 // Direct Supabase Postgres SQL REST API Endpoint
 const REST_TABLE_URL = `${SUPABASE_PROJECT_URL}/rest/v1/song_requests`;
 
-const PRIMARY_STORAGE_KEY = 'beatpulse_postgres_requests_master_v12';
+const PRIMARY_STORAGE_KEY = 'beatpulse_postgres_requests_master_v13';
 const DEVICE_ID_KEY = 'beatpulse_user_device_id';
 
 const broadcastChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('beatpulse_supabase_channel') : null;
@@ -88,13 +90,13 @@ export function saveLocalStoredRequests(requests: SongRequest[]): void {
   } catch (e) {}
 }
 
-// Fetch master requests queue directly from Supabase Postgres Database Table
+// Fetch master requests queue directly from Supabase Postgres Database Table with safe fallback
 export async function fetchCloudRequests(): Promise<SongRequest[]> {
   try {
     const tableRes = await fetch(`${REST_TABLE_URL}?select=*&order=created_at.desc`, {
       headers: {
-        'apikey': SUPABASE_API_KEY,
-        'Authorization': `Bearer ${SUPABASE_API_KEY}`,
+        'apikey': SUPABASE_PUB_KEY,
+        'Authorization': `Bearer ${SUPABASE_PUB_KEY}`,
       },
       cache: 'no-store'
     });
@@ -133,8 +135,8 @@ export async function saveCloudRequestItem(newReq: SongRequest): Promise<boolean
     const tableRes = await fetch(REST_TABLE_URL, {
       method: 'POST',
       headers: {
-        'apikey': SUPABASE_API_KEY,
-        'Authorization': `Bearer ${SUPABASE_API_KEY}`,
+        'apikey': SUPABASE_PUB_KEY,
+        'Authorization': `Bearer ${SUPABASE_PUB_KEY}`,
         'Content-Type': 'application/json',
         'Prefer': 'resolution=merge-duplicates,return=minimal',
       },
@@ -158,8 +160,8 @@ export async function updateCloudRequestStatus(requestId: string, status: Reques
     const res = await fetch(`${REST_TABLE_URL}?id=eq.${requestId}`, {
       method: 'PATCH',
       headers: {
-        'apikey': SUPABASE_API_KEY,
-        'Authorization': `Bearer ${SUPABASE_API_KEY}`,
+        'apikey': SUPABASE_PUB_KEY,
+        'Authorization': `Bearer ${SUPABASE_PUB_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -183,8 +185,8 @@ export async function deleteCloudRequestItem(requestId: string): Promise<boolean
     const res = await fetch(`${REST_TABLE_URL}?id=eq.${requestId}`, {
       method: 'DELETE',
       headers: {
-        'apikey': SUPABASE_API_KEY,
-        'Authorization': `Bearer ${SUPABASE_API_KEY}`,
+        'apikey': SUPABASE_PUB_KEY,
+        'Authorization': `Bearer ${SUPABASE_PUB_KEY}`,
       },
     });
     return res.ok;
