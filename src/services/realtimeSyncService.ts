@@ -2,7 +2,7 @@ import { SongRequest, RequestStatus } from '../types';
 import { INITIAL_PRIORITY_OPTIONS } from '../data/mockDatabase';
 
 // Supabase Cloud Realtime Database Service for BeatPulse DJ Platform
-// Connected directly to user Supabase project: fqaxiiajtnvzyvxektdx.supabase.co
+// Connected directly to user Supabase Postgres Database: fqaxiiajtnvzyvxektdx.supabase.co
 
 const SUPABASE_PROJECT_URL = 'https://fqaxiiajtnvzyvxektdx.supabase.co';
 
@@ -13,16 +13,15 @@ const decodeKey = (b64: string) =>
 
 const SUPABASE_API_KEY = decodeKey('c2Jfc2VjcmV0X1lTaUtyeWZPUi1vdEtwcVEuanlPM1FfS1JzejRuUjQ=');
 
-// Ultra-reliable Supabase Storage Endpoints (100% HTTP 200 OK)
-const PUBLIC_STORAGE_URL = `${SUPABASE_PROJECT_URL}/storage/v1/object/public/dj_requests/master_queue.json`;
-const UPLOAD_STORAGE_URL = `${SUPABASE_PROJECT_URL}/storage/v1/object/dj_requests/master_queue.json`;
+// Direct Supabase Postgres SQL REST API Endpoint
+const REST_TABLE_URL = `${SUPABASE_PROJECT_URL}/rest/v1/song_requests`;
 
-const PRIMARY_STORAGE_KEY = 'beatpulse_supabase_requests_master_v11';
+const PRIMARY_STORAGE_KEY = 'beatpulse_postgres_requests_master_v12';
 const DEVICE_ID_KEY = 'beatpulse_user_device_id';
 
 const broadcastChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('beatpulse_supabase_channel') : null;
 
-// Pure JSON Sanitizer (removes any undefined properties so JSON.stringify never produces bad requests)
+// Defensive sanitizer for SongRequest objects to prevent React crash errors
 export function sanitizeRequest(req: any): SongRequest | null {
   if (!req || typeof req !== 'object' || !req.id) return null;
 
@@ -89,28 +88,10 @@ export function saveLocalStoredRequests(requests: SongRequest[]): void {
   } catch (e) {}
 }
 
-export function mergeRequests(local: SongRequest[], remote: SongRequest[]): SongRequest[] {
-  const map = new Map<string, SongRequest>();
-
-  for (const req of remote) {
-    const s = sanitizeRequest(req);
-    if (s) map.set(s.id, s);
-  }
-
-  for (const req of local) {
-    const s = sanitizeRequest(req);
-    if (s && !map.has(s.id)) map.set(s.id, s);
-  }
-
-  return Array.from(map.values()).sort(
-    (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-  );
-}
-
-// Fetch master requests queue cleanly from Supabase Storage JSON with Auth Headers
+// Fetch master requests queue directly from Supabase Postgres Database Table
 export async function fetchCloudRequests(): Promise<SongRequest[]> {
   try {
-    const storageRes = await fetch(`${PUBLIC_STORAGE_URL}?t=${Date.now()}`, {
+    const tableRes = await fetch(`${REST_TABLE_URL}?select=*&order=created_at.desc`, {
       headers: {
         'apikey': SUPABASE_API_KEY,
         'Authorization': `Bearer ${SUPABASE_API_KEY}`,
@@ -118,12 +99,20 @@ export async function fetchCloudRequests(): Promise<SongRequest[]> {
       cache: 'no-store'
     });
 
-    if (storageRes.ok) {
-      const data = await storageRes.json();
-      if (data && Array.isArray(data.requests)) {
-        const sanitizedRemote = data.requests.map(sanitizeRequest).filter((r): r is SongRequest => r !== null);
-        saveLocalStoredRequests(sanitizedRemote);
-        return sanitizedRemote;
+    if (tableRes.ok) {
+      const rows = await tableRes.json();
+      if (Array.isArray(rows)) {
+        const remoteList: SongRequest[] = [];
+        for (const row of rows) {
+          const reqObj = row.payload || row;
+          if (reqObj) {
+            reqObj.status = row.status || reqObj.status;
+            const sanitized = sanitizeRequest(reqObj);
+            if (sanitized) remoteList.push(sanitized);
+          }
+        }
+        saveLocalStoredRequests(remoteList);
+        return remoteList;
       }
     }
   } catch (e) {}
@@ -131,70 +120,75 @@ export async function fetchCloudRequests(): Promise<SongRequest[]> {
   return getLocalStoredRequests();
 }
 
-// Atomic Cloud Upload: Fetches current cloud list first, appends new item, and uploads combined array
+// Insert new song request row into Supabase Postgres Database Table
 export async function saveCloudRequestItem(newReq: SongRequest): Promise<boolean> {
   const sanitized = sanitizeRequest(newReq);
   if (!sanitized) return false;
 
-  // 1. Fetch current remote cloud list
-  let remoteList: SongRequest[] = [];
-  try {
-    const res = await fetch(`${PUBLIC_STORAGE_URL}?t=${Date.now()}`, {
-      headers: {
-        'apikey': SUPABASE_API_KEY,
-        'Authorization': `Bearer ${SUPABASE_API_KEY}`,
-      },
-      cache: 'no-store'
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data && Array.isArray(data.requests)) {
-        remoteList = data.requests.map(sanitizeRequest).filter((r): r is SongRequest => r !== null);
-      }
-    }
-  } catch (e) {}
+  const currentLocal = getLocalStoredRequests();
+  const updatedLocal = [sanitized, ...currentLocal.filter((r) => r.id !== sanitized.id)];
+  saveLocalStoredRequests(updatedLocal);
 
-  // 2. Merge new request into remote list
-  const combined = mergeRequests([sanitized], remoteList);
-  saveLocalStoredRequests(combined);
-
-  // 3. Upload combined master array back to Supabase Cloud Storage using PUT
   try {
-    const res = await fetch(UPLOAD_STORAGE_URL, {
-      method: 'PUT',
+    const tableRes = await fetch(REST_TABLE_URL, {
+      method: 'POST',
       headers: {
         'apikey': SUPABASE_API_KEY,
         'Authorization': `Bearer ${SUPABASE_API_KEY}`,
         'Content-Type': 'application/json',
-        'cache-control': 'no-cache',
+        'Prefer': 'resolution=merge-duplicates,return=minimal',
       },
-      body: JSON.stringify({ requests: combined }),
+      body: JSON.stringify({
+        id: sanitized.id,
+        device_id: sanitized.deviceId,
+        status: sanitized.status,
+        payload: sanitized,
+        created_at: sanitized.createdAt,
+      }),
     });
+    return tableRes.ok;
+  } catch (e) {
+    return false;
+  }
+}
 
+// Update status (accepted/playing/rejected) of a request in Supabase Postgres Table
+export async function updateCloudRequestStatus(requestId: string, status: RequestStatus, reason?: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${REST_TABLE_URL}?id=eq.${requestId}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPABASE_API_KEY,
+        'Authorization': `Bearer ${SUPABASE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        status,
+        updated_at: new Date().toISOString(),
+      }),
+    });
     return res.ok;
   } catch (e) {
     return false;
   }
 }
 
-export async function saveCloudRequests(requests: SongRequest[]): Promise<boolean> {
-  const sanitized = requests.map(sanitizeRequest).filter((r): r is SongRequest => r !== null);
-  saveLocalStoredRequests(sanitized);
+// Delete request row permanently from Supabase Postgres Table
+export async function deleteCloudRequestItem(requestId: string): Promise<boolean> {
+  const currentLocal = getLocalStoredRequests();
+  const updatedLocal = currentLocal.filter((r) => r.id !== requestId);
+  saveLocalStoredRequests(updatedLocal);
 
   try {
-    const res = await fetch(UPLOAD_STORAGE_URL, {
-      method: 'PUT',
+    const res = await fetch(`${REST_TABLE_URL}?id=eq.${requestId}`, {
+      method: 'DELETE',
       headers: {
         'apikey': SUPABASE_API_KEY,
         'Authorization': `Bearer ${SUPABASE_API_KEY}`,
-        'Content-Type': 'application/json',
-        'cache-control': 'no-cache',
       },
-      body: JSON.stringify({ requests: sanitized }),
     });
-
     return res.ok;
-  } catch (err) {
+  } catch (e) {
     return false;
   }
 }
