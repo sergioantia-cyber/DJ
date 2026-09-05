@@ -1,0 +1,8 @@
+{
+  "appId": "club.beatpulse.dj",
+  "appName": "BeatPulse DJ Club",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}

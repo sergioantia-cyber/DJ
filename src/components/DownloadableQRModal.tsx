@@ -395,16 +395,28 @@ export const DownloadableQRModal: React.FC<DownloadableQRModalProps> = ({
               </ol>
             </div>
 
-            {/* Direct Open Link Button */}
-            <a
-              href={targetUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="w-full py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-extrabold text-xs shadow-md flex items-center justify-center gap-2 hover:brightness-110 transition-all"
-            >
-              <ExternalLink className="w-4 h-4" />
-              <span>Abrir App en otra pestaña</span>
-            </a>
+            {/* Direct APK Download Button */}
+            <div className="pt-2 space-y-2">
+              <a
+                href="https://github.com/sergioantia-cyber/DJ/releases/download/latest-apk/app-debug.apk"
+                target="_blank"
+                rel="noreferrer"
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 text-white font-extrabold text-xs shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 hover:brightness-110 active:scale-95 transition-all"
+              >
+                <Download className="w-4 h-4" />
+                <span>📥 Descargar Archivo APK Directo (.apk)</span>
+              </a>
+
+              <a
+                href={targetUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="w-full py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-extrabold text-xs shadow-md flex items-center justify-center gap-2 hover:brightness-110 transition-all"
+              >
+                <ExternalLink className="w-4 h-4" />
+                <span>Abrir Web App Móvil</span>
+              </a>
+            </div>
 
           </div>
         )}
