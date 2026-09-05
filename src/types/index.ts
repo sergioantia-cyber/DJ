@@ -79,7 +79,16 @@ export interface OwnerConfig {
     play_now: number;
   };
   // Payment Details
-  nequiPhone: string;
-  bancolombiaAcc: string;
-  bancolombiaQrImage: string;
+  nequiPhone?: string;
+  bancolombiaAcc?: string;
+  bancolombiaQrImage?: string;
+  nequiQrUrl?: string;
+  nequiPhoneNumber?: string;
+  nequiAccountName?: string;
+  bancolombiaQrUrl?: string;
+  bancolombiaAccountNumber?: string;
+  bancolombiaAccountName?: string;
+  baseSongPriceCOP?: number;
+  allowFreeRequests?: boolean;
+  apkDownloadUrl?: string;
 }

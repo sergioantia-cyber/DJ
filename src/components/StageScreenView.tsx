@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Disc3, QrCode, Sparkles, MessageSquare, Volume2, VolumeX, Radio, Zap, Play, Pause } from 'lucide-react';
-import { SongRequest } from '../types';
+import { Disc3, QrCode, Sparkles, MessageSquare, Volume2, VolumeX, Radio, Zap, Play, Pause, Download } from 'lucide-react';
+import QRCode from 'qrcode';
+import { SongRequest, OwnerConfig } from '../types';
 
 interface StageScreenViewProps {
   requests: SongRequest[];
+  ownerConfig?: OwnerConfig;
+  onOpenQRModal?: () => void;
 }
 
-export const StageScreenView: React.FC<StageScreenViewProps> = ({ requests }) => {
+export const StageScreenView: React.FC<StageScreenViewProps> = ({ requests, ownerConfig, onOpenQRModal }) => {
   // EXCLUDE 'pending' requests from public Stage Screen display!
   // Only display songs confirmed/accepted by the DJ (status: playing, accepted, sent_to_vdj, completed)
   const confirmedRequests = requests.filter((r) => r.status !== 'pending' && r.status !== 'rejected');
@@ -22,6 +25,31 @@ export const StageScreenView: React.FC<StageScreenViewProps> = ({ requests }) =>
 
   const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const targetAppUrl = ownerConfig?.apkDownloadUrl?.trim() || (typeof window !== 'undefined' ? window.location.origin : 'https://dj-phi-ruby.vercel.app');
+
+  // Render high-contrast scannable QR on Stage Screen
+  useEffect(() => {
+    if (qrCanvasRef.current) {
+      QRCode.toCanvas(
+        qrCanvasRef.current,
+        targetAppUrl,
+        {
+          width: 80,
+          margin: 1,
+          color: {
+            dark: '#000000',
+            light: '#ffffff',
+          },
+          errorCorrectionLevel: 'M',
+        },
+        (err) => {
+          if (err) console.error('Error rendering stage QR:', err);
+        }
+      );
+    }
+  }, [targetAppUrl]);
 
   // Auto-play audio whenever the active song changes
   useEffect(() => {
@@ -199,17 +227,28 @@ export const StageScreenView: React.FC<StageScreenViewProps> = ({ requests }) =>
           )}
         </div>
 
-        {/* Scan QR Code Banner */}
-        <div className="md:col-span-5 glass-panel-neon rounded-2xl p-4 border border-pink-500/40 flex items-center justify-between gap-4">
+        {/* Scan QR Code Banner with Real Canvas & Click-to-Download */}
+        <div
+          onClick={onOpenQRModal}
+          className="md:col-span-5 glass-panel-neon rounded-2xl p-4 border border-pink-500/40 flex items-center justify-between gap-4 cursor-pointer hover:border-pink-400/80 transition-all group select-none shadow-lg"
+        >
           <div>
-            <span className="text-[10px] font-black text-pink-400 uppercase tracking-widest block">
-              ¿Quieres escuchar tu música?
+            <span className="text-[10px] font-black text-pink-400 uppercase tracking-widest block flex items-center gap-1.5">
+              <span>¿Quieres pedir tu canción?</span>
+              <Sparkles className="w-3 h-3 text-amber-400 animate-pulse" />
             </span>
-            <h4 className="text-sm font-extrabold text-white">Escanea para pedir al DJ</h4>
+            <h4 className="text-sm font-extrabold text-white group-hover:text-pink-300 transition-colors">
+              Escanea para pedir al DJ
+            </h4>
             <p className="text-[11px] text-slate-300 mt-0.5">Paga fácil con Nequi o Bancolombia</p>
+            {onOpenQRModal && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-pink-400 group-hover:underline mt-1">
+                <Download className="w-3 h-3" /> Clic para descargar o ver QR grande
+              </span>
+            )}
           </div>
-          <div className="w-16 h-16 bg-white rounded-xl p-1.5 flex items-center justify-center flex-shrink-0 shadow-lg">
-            <QrCode className="w-full h-full text-slate-900" />
+          <div className="bg-white rounded-xl p-1 flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-105 transition-transform">
+            <canvas ref={qrCanvasRef} className="rounded-lg w-[76px] h-[76px]" />
           </div>
         </div>
 

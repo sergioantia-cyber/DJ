@@ -20,7 +20,9 @@ import {
   Sliders,
   Sparkles,
   RefreshCw,
-  Trash2
+  Trash2,
+  QrCode,
+  Printer
 } from 'lucide-react';
 import { SongRequest, RequestStatus, VirtualDJConfig, OwnerConfig } from '../types';
 import { soundFx } from '../services/soundEffects';
@@ -32,6 +34,7 @@ interface DJBoothViewProps {
   onUpdateRequestStatus: (requestId: string, newStatus: RequestStatus, reason?: string) => void;
   onDeleteRequest: (requestId: string) => void;
   onToggleAutoAccept: () => void;
+  onOpenQRModal?: () => void;
 }
 
 export const DJBoothView: React.FC<DJBoothViewProps> = ({
@@ -41,6 +44,7 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
   onUpdateRequestStatus,
   onDeleteRequest,
   onToggleAutoAccept,
+  onOpenQRModal,
 }) => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [rejectionModalReqId, setRejectionModalReqId] = useState<string | null>(null);
@@ -311,7 +315,19 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
           <div className="flex items-center gap-3">
             <Disc3 className="w-7 h-7 text-pink-400 animate-spin-slow" />
             <div>
-              <h3 className="text-xl font-extrabold text-white">Cola de Pedidos</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xl font-extrabold text-white">Cola de Pedidos</h3>
+                {onOpenQRModal && (
+                  <button
+                    onClick={onOpenQRModal}
+                    className="px-2.5 py-1 rounded-lg bg-pink-500/20 hover:bg-pink-600 text-pink-300 hover:text-white border border-pink-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                    title="Ver y Descargar código QR para mesas o descargar APK"
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    <span>Descargar QR Mesas</span>
+                  </button>
+                )}
+              </div>
               <p className="text-xs text-slate-400">Verifica el pago del cliente y aprueba para proyectar en la Pantalla del Club</p>
             </div>
           </div>

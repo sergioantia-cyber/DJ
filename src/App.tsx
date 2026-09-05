@@ -6,6 +6,7 @@ import { OwnerDashboardView } from './components/OwnerDashboardView';
 import { StageScreenView } from './components/StageScreenView';
 import { VirtualDJBridgeView } from './components/VirtualDJBridgeView';
 import { TermsAndConditionsModal } from './components/TermsAndConditionsModal';
+import { DownloadableQRModal } from './components/DownloadableQRModal';
 import { Lock, ShieldCheck, KeyRound, X } from 'lucide-react';
 
 import { INITIAL_SONGS, INITIAL_REQUESTS, DEFAULT_OWNER_CONFIG } from './data/mockDatabase';
@@ -64,6 +65,7 @@ export function App() {
   });
 
   const [isTermsModalOpen, setIsTermsModalOpen] = useState<boolean>(false);
+  const [isQRModalOpen, setIsQRModalOpen] = useState<boolean>(false);
   const [logoTapCount, setLogoTapCount] = useState<number>(0);
 
   // Security PIN state for DJ and Owner portals
@@ -294,6 +296,7 @@ export function App() {
         isStealthAdminUnlocked={isStealthAdminUnlocked}
         unlockedRole={unlockedRole}
         onSecretLogoTap={handleSecretLogoTap}
+        onOpenQRModal={() => setIsQRModalOpen(true)}
       />
 
       {/* Main Content View */}
@@ -304,6 +307,7 @@ export function App() {
             userRequests={requests}
             ownerConfig={ownerConfig}
             onSubmitRequest={handleSubmitNewRequest}
+            onOpenQRModal={() => setIsQRModalOpen(true)}
           />
         )}
 
@@ -315,6 +319,7 @@ export function App() {
             onUpdateRequestStatus={handleUpdateRequestStatus}
             onDeleteRequest={handleDeleteRequest}
             onToggleAutoAccept={handleToggleAutoAccept}
+            onOpenQRModal={() => setIsQRModalOpen(true)}
           />
         )}
 
@@ -324,12 +329,17 @@ export function App() {
             onUpdateOwnerConfig={handleUpdateOwnerConfig}
             requests={requests}
             onOpenTermsModal={() => setIsTermsModalOpen(true)}
+            onOpenQRModal={() => setIsQRModalOpen(true)}
           />
         )}
 
         {activeTab === 'stage' && (
           <div className="p-4 sm:p-6">
-            <StageScreenView requests={requests} />
+            <StageScreenView
+              requests={requests}
+              ownerConfig={ownerConfig}
+              onOpenQRModal={() => setIsQRModalOpen(true)}
+            />
           </div>
         )}
 
@@ -387,6 +397,14 @@ export function App() {
         isOpen={isTermsModalOpen}
         onAccept={handleAcceptTerms}
         clubName={ownerConfig.clubName}
+      />
+
+      {/* Downloadable QR Code & Mobile APK Modal */}
+      <DownloadableQRModal
+        isOpen={isQRModalOpen}
+        onClose={() => setIsQRModalOpen(false)}
+        ownerConfig={ownerConfig}
+        onUpdateOwnerConfig={handleUpdateOwnerConfig}
       />
 
     </div>

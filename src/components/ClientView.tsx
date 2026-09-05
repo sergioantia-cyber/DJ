@@ -31,6 +31,7 @@ interface ClientViewProps {
   onSubmitRequest: (
     newReq: Omit<SongRequest, 'id' | 'createdAt' | 'status' | 'platformFeeCOP' | 'djShareCOP' | 'clubShareCOP'>
   ) => void;
+  onOpenQRModal?: () => void;
 }
 
 export const ClientView: React.FC<ClientViewProps> = ({
@@ -38,6 +39,7 @@ export const ClientView: React.FC<ClientViewProps> = ({
   userRequests,
   ownerConfig,
   onSubmitRequest,
+  onOpenQRModal,
 }) => {
   const deviceId = getOrCreateDeviceId();
 
@@ -221,6 +223,33 @@ export const ClientView: React.FC<ClientViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* QR Code & Mobile APK Card Banner */}
+      {onOpenQRModal && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-900/40 via-pink-900/30 to-amber-900/30 border border-purple-500/30 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg animate-fadeIn">
+          <div className="flex items-center gap-3 text-left">
+            <div className="w-10 h-10 rounded-xl bg-pink-500/20 border border-pink-500/30 flex items-center justify-center text-pink-400 flex-shrink-0">
+              <QrCode className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                <span>📲 ¿Estás en una mesa del club? Descarga la App o el QR</span>
+              </h4>
+              <p className="text-[11px] text-slate-300">
+                Comparte o descarga el código QR para que todos en tu mesa puedan pedir canciones y pagar al instante.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={onOpenQRModal}
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:brightness-110 text-white font-extrabold text-xs shadow-md flex items-center gap-2 flex-shrink-0 transition-all active:scale-95"
+          >
+            <QrCode className="w-4 h-4" />
+            <span>Ver / Descargar QR</span>
+          </button>
+        </div>
+      )}
 
       {submitSuccessMsg && (
         <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center justify-between animate-fadeIn">

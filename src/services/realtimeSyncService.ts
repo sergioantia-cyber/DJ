@@ -17,7 +17,7 @@ const SUPABASE_API_KEY = decodeKey('c2Jfc2VjcmV0X1lTaUtyeWZPUi1vdEtwcVEuanlPM1Ff
 const PUBLIC_STORAGE_URL = `${SUPABASE_PROJECT_URL}/storage/v1/object/public/dj_requests/master_queue.json`;
 const UPLOAD_STORAGE_URL = `${SUPABASE_PROJECT_URL}/storage/v1/object/dj_requests/master_queue.json`;
 
-const PRIMARY_STORAGE_KEY = 'beatpulse_storage_requests_master_v15';
+const PRIMARY_STORAGE_KEY = 'beatpulse_storage_requests_master_v16';
 const DEVICE_ID_KEY = 'beatpulse_user_device_id';
 
 const broadcastChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('beatpulse_supabase_channel') : null;
@@ -97,17 +97,12 @@ export function mergeRequests(local: SongRequest[], remote: SongRequest[]): Song
     if (s) map.set(s.id, s);
   }
 
-  for (const req of local) {
-    const s = sanitizeRequest(req);
-    if (s && !map.has(s.id)) map.set(s.id, s);
-  }
-
   return Array.from(map.values()).sort(
     (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
   );
 }
 
-// Fetch master requests queue cleanly from Supabase Storage JSON (100% HTTP 200 OK, 0 Auth Errors)
+// Fetch master requests queue cleanly from Supabase Storage JSON (Master Source of Truth)
 export async function fetchCloudRequests(): Promise<SongRequest[]> {
   try {
     const storageRes = await fetch(`${PUBLIC_STORAGE_URL}?t=${Date.now()}`, { cache: 'no-store' });
@@ -124,7 +119,7 @@ export async function fetchCloudRequests(): Promise<SongRequest[]> {
   return getLocalStoredRequests();
 }
 
-// Atomic Cloud Upload: Fetches current cloud list first, appends new item, and uploads combined array with HTTP PUT
+// Atomic Cloud Upload: Fetches current cloud list first, appends new item, and uploads combined array with x-upsert header
 export async function saveCloudRequestItem(newReq: SongRequest): Promise<boolean> {
   const sanitized = sanitizeRequest(newReq);
   if (!sanitized) return false;
@@ -142,17 +137,22 @@ export async function saveCloudRequestItem(newReq: SongRequest): Promise<boolean
   } catch (e) {}
 
   // 2. Merge new request into remote list
-  const combined = mergeRequests([sanitized], remoteList);
+  const map = new Map<string, SongRequest>();
+  for (const r of remoteList) map.set(r.id, r);
+  map.set(sanitized.id, sanitized);
+  const combined = Array.from(map.values());
+
   saveLocalStoredRequests(combined);
 
-  // 3. Upload combined master array back to Supabase Cloud Storage using HTTP PUT with apikey header
+  // 3. Upload combined master array back to Supabase Cloud Storage using POST with x-upsert: true
   try {
     const res = await fetch(UPLOAD_STORAGE_URL, {
-      method: 'PUT',
+      method: 'POST',
       headers: {
         'apikey': SUPABASE_API_KEY,
         'Authorization': `Bearer ${SUPABASE_API_KEY}`,
         'Content-Type': 'application/json',
+        'x-upsert': 'true',
       },
       body: JSON.stringify({ requests: combined }),
     });
@@ -163,18 +163,19 @@ export async function saveCloudRequestItem(newReq: SongRequest): Promise<boolean
   }
 }
 
-// Update status or array in Supabase Storage JSON using HTTP PUT
+// Save updated queue to Supabase Storage with mandatory x-upsert: true header
 export async function saveCloudRequests(requests: SongRequest[]): Promise<boolean> {
   const sanitized = requests.map(sanitizeRequest).filter((r): r is SongRequest => r !== null);
   saveLocalStoredRequests(sanitized);
 
   try {
     const res = await fetch(UPLOAD_STORAGE_URL, {
-      method: 'PUT',
+      method: 'POST',
       headers: {
         'apikey': SUPABASE_API_KEY,
         'Authorization': `Bearer ${SUPABASE_API_KEY}`,
         'Content-Type': 'application/json',
+        'x-upsert': 'true',
       },
       body: JSON.stringify({ requests: sanitized }),
     });

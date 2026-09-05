@@ -25,6 +25,7 @@ interface OwnerDashboardViewProps {
   onUpdateOwnerConfig: (newConfig: Partial<OwnerConfig>) => void;
   requests: SongRequest[];
   onOpenTermsModal: () => void;
+  onOpenQRModal?: () => void;
 }
 
 export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
@@ -32,6 +33,7 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
   onUpdateOwnerConfig,
   requests,
   onOpenTermsModal,
+  onOpenQRModal,
 }) => {
   const [selectedTableForQR, setSelectedTableForQR] = useState<string>('Mesa 12 (Zona VIP)');
   const [isEditingPrices, setIsEditingPrices] = useState<boolean>(false);
@@ -309,13 +311,25 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
               <QrCode className="w-5 h-5 text-cyan-400" />
               <h3 className="font-extrabold text-white text-base">Generador de QRs para Mesas</h3>
             </div>
-            <button
-              onClick={handlePrintQR}
-              className="px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-cyan-600/30 transition-all"
-            >
-              <Printer className="w-4 h-4" />
-              <span>Imprimir QR</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {onOpenQRModal && (
+                <button
+                  onClick={onOpenQRModal}
+                  className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all"
+                  title="Descargar afiche completo PNG o configurar enlace de la APK"
+                >
+                  <QrCode className="w-4 h-4 text-pink-300" />
+                  <span>📥 Descargar Afiche / APK</span>
+                </button>
+              )}
+              <button
+                onClick={handlePrintQR}
+                className="px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-cyan-600/30 transition-all"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Imprimir</span>
+              </button>
+            </div>
           </div>
 
           <p className="text-xs text-slate-300">

@@ -1,5 +1,4 @@
-import React from 'react';
-import { Disc3, Music, DollarSign, Smartphone, Tv, Cpu, ShieldAlert, Sparkles, Volume2 } from 'lucide-react';
+import { Disc3, Music, DollarSign, Smartphone, Tv, Cpu, ShieldAlert, Sparkles, Volume2, QrCode } from 'lucide-react';
 import { VirtualDJConfig, OwnerConfig } from '../types';
 
 interface NavbarProps {
@@ -12,6 +11,7 @@ interface NavbarProps {
   isStealthAdminUnlocked: boolean;
   unlockedRole?: 'dj' | 'owner' | null;
   onSecretLogoTap: () => void;
+  onOpenQRModal?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -24,6 +24,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   isStealthAdminUnlocked,
   unlockedRole = 'dj',
   onSecretLogoTap,
+  onOpenQRModal,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-[#08080c]/90 backdrop-blur-xl border-b border-white/10 px-4 py-3">
@@ -132,6 +133,18 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
 
         </div>
+
+        {/* Downloadable QR Code & APK Button */}
+        {onOpenQRModal && (
+          <button
+            onClick={onOpenQRModal}
+            title="Ver y Descargar Código QR / App APK para Mesas"
+            className="px-3 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 bg-gradient-to-r from-purple-600/30 to-pink-600/30 hover:from-purple-600 hover:to-pink-600 text-pink-300 hover:text-white border border-pink-500/40 shadow-md hover:scale-105 active:scale-95 flex-shrink-0"
+          >
+            <QrCode className="w-4 h-4 text-pink-400" />
+            <span className="hidden sm:inline">📱 QR / App</span>
+          </button>
+        )}
 
       </div>
     </header>
