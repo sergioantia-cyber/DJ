@@ -398,13 +398,12 @@ export const DownloadableQRModal: React.FC<DownloadableQRModalProps> = ({
             {/* Direct APK Download Button */}
             <div className="pt-2 space-y-2">
               <a
-                href="https://github.com/sergioantia-cyber/DJ/releases/download/latest-apk/app-debug.apk"
-                target="_blank"
-                rel="noreferrer"
+                href={ownerConfig.apkDownloadUrl || '/beatpulse-dj.apk'}
+                download="beatpulse-dj.apk"
                 className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 text-white font-extrabold text-xs shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 hover:brightness-110 active:scale-95 transition-all"
               >
                 <Download className="w-4 h-4" />
-                <span>📥 Descargar Archivo APK Directo (.apk)</span>
+                <span>📥 Descargar Archivo APK Directo (4.2 MB)</span>
               </a>
 
               <a
