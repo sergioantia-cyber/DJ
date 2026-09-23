@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Search,
   Flame,
@@ -17,7 +17,12 @@ import {
   ShieldCheck,
   Smartphone,
   RefreshCw,
-  Send
+  Send,
+  X,
+  Play,
+  Pause,
+  PlusCircle,
+  Volume2
 } from 'lucide-react';
 import { Song, SongRequest, OwnerConfig, PriorityOption } from '../types';
 import { INITIAL_PRIORITY_OPTIONS } from '../data/mockDatabase';
@@ -46,6 +51,7 @@ export const ClientView: React.FC<ClientViewProps> = ({
   const [activeSubTab, setActiveSubTab] = useState<'request' | 'history'>('request');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
+  const [isOrderModalOpen, setIsOrderModalOpen] = useState<boolean>(false);
   const [selectedPriority, setSelectedPriority] = useState<PriorityOption>(INITIAL_PRIORITY_OPTIONS[0]);
 
   // Form Fields
@@ -56,6 +62,14 @@ export const ClientView: React.FC<ClientViewProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<'nequi_qr' | 'bancolombia_qr'>('nequi_qr');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submitSuccessMsg, setSubmitSuccessMsg] = useState<string>('');
+
+  // Audio Preview state
+  const [playingPreviewUrl, setPlayingPreviewUrl] = useState<string | null>(null);
+  const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
+
+  // Custom song modal fields
+  const [customTitle, setCustomTitle] = useState<string>('');
+  const [customArtist, setCustomArtist] = useState<string>('');
 
   // iTunes API Search Results State
   const [searchResults, setSearchResults] = useState<Song[]>(songs);
@@ -119,7 +133,7 @@ export const ClientView: React.FC<ClientViewProps> = ({
     }
 
     // Add live matching device requests
-    const deviceRequests = userRequests.filter((r) => r.deviceId === deviceId || r.userName === userName);
+    const deviceRequests = userRequests.filter((r) => r.deviceId === deviceId || (userName && r.userName === userName));
     for (const r of deviceRequests) {
       if (r && r.id) map.set(r.id, r);
     }
@@ -131,20 +145,76 @@ export const ClientView: React.FC<ClientViewProps> = ({
 
   const totalCostCOP = (selectedPriority?.priceCOP || 10000) + tipAmountCOP;
 
+  // Handles clicking a song card or button -> Immediately opens the request modal
   const handleSelectSong = (song: Song) => {
     setSelectedSong(song);
-    soundFx.playCoinChime();
+    setIsOrderModalOpen(true);
+    try {
+      soundFx.playCoinChime();
+    } catch (e) {}
+  };
+
+  // Handles opening custom song request
+  const handleOpenCustomSong = () => {
+    const customSong: Song = {
+      id: `custom-${Date.now()}`,
+      title: customTitle.trim() || 'Canción Personalizada',
+      artist: customArtist.trim() || 'Artista no especificado',
+      albumCover: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80',
+      genre: 'Reggaeton',
+      bpm: 128,
+      duration: '3:30',
+      energyLevel: 9,
+    };
+    setSelectedSong(customSong);
+    setIsOrderModalOpen(true);
+    try {
+      soundFx.playCoinChime();
+    } catch (e) {}
+  };
+
+  // Handles audio preview playback
+  const toggleAudioPreview = (url?: string) => {
+    if (!url) return;
+    if (playingPreviewUrl === url) {
+      audioPreviewRef.current?.pause();
+      setPlayingPreviewUrl(null);
+    } else {
+      if (audioPreviewRef.current) {
+        audioPreviewRef.current.pause();
+      }
+      const audio = new Audio(url);
+      audioPreviewRef.current = audio;
+      audio.play().catch(() => {});
+      audio.onended = () => setPlayingPreviewUrl(null);
+      setPlayingPreviewUrl(url);
+    }
+  };
+
+  const handleCloseModal = () => {
+    if (audioPreviewRef.current) {
+      audioPreviewRef.current.pause();
+      setPlayingPreviewUrl(null);
+    }
+    setIsOrderModalOpen(false);
   };
 
   const handleSubmitRequestForm = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSong) return;
 
+    // Use custom title/artist if specified
+    const finalSong: Song = {
+      ...selectedSong,
+      title: customTitle.trim() && selectedSong.id.startsWith('custom-') ? customTitle.trim() : selectedSong.title,
+      artist: customArtist.trim() && selectedSong.id.startsWith('custom-') ? customArtist.trim() : selectedSong.artist,
+    };
+
     setIsSubmitting(true);
 
     const newReqData = {
       deviceId,
-      song: selectedSong,
+      song: finalSong,
       priority: selectedPriority,
       userName: userName.trim() || 'Cliente Anónimo',
       tableNumber: tableNumber.trim() || 'Mesa General',
@@ -174,10 +244,13 @@ export const ClientView: React.FC<ClientViewProps> = ({
     } catch (e) {}
 
     setIsSubmitting(false);
-    setSubmitSuccessMsg('¡Tu canción ha sido enviada a la cabina del DJ! Confirma la transferencia en tu app bancaria.');
+    setSubmitSuccessMsg(`¡"${finalSong.title}" ha sido enviada a la cabina del DJ! Tu pedido está en cola.`);
+    handleCloseModal();
     setSelectedSong(null);
     setDedicatedMessage('');
     setTipAmountCOP(0);
+    setCustomTitle('');
+    setCustomArtist('');
     setActiveSubTab('history');
   };
 
@@ -189,13 +262,13 @@ export const ClientView: React.FC<ClientViewProps> = ({
         <div className="space-y-2 z-10">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30 text-xs font-bold uppercase tracking-wider">
             <Radio className="w-3.5 h-3.5 animate-pulse" />
-            <span>Música en Vivo • Club Ibiza</span>
+            <span>Música en Vivo • {ownerConfig.clubName || 'Club Ibiza'}</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
             Pide tu Canción y Dedícala en la Pantalla del Club
           </h2>
           <p className="text-xs text-slate-300 max-w-lg">
-            Selecciona tu éxito musical favorito, ingresa tu mensaje de dedicatoria y sonará en los altavoces de la discoteca.
+            Selecciona tu canción favorita, ingresa tu mesa y dedicatoria para que el DJ la ponga a sonar.
           </p>
         </div>
 
@@ -251,8 +324,9 @@ export const ClientView: React.FC<ClientViewProps> = ({
         </div>
       )}
 
+      {/* Success Notification Alert */}
       {submitSuccessMsg && (
-        <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center justify-between animate-fadeIn">
+        <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center justify-between animate-fadeIn shadow-lg">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
             <span>{submitSuccessMsg}</span>
@@ -263,17 +337,26 @@ export const ClientView: React.FC<ClientViewProps> = ({
         </div>
       )}
 
-      {/* SUBTAB 1: REQUEST A SONG FORM */}
+      {/* SUBTAB 1: REQUEST A SONG */}
       {activeSubTab === 'request' && (
         <div className="space-y-6">
           
-          {/* Step 1: Search Music */}
+          {/* Step 1: Search Music & Custom Song Trigger */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <h3 className="text-sm font-extrabold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                <span>1. Busca tu Canción Favorita</span>
+                <span>1. Toca una Canción para Pedirla al DJ</span>
                 {isSearchingiTunes && <RefreshCw className="w-4 h-4 text-pink-400 animate-spin" />}
               </h3>
+
+              <button
+                type="button"
+                onClick={handleOpenCustomSong}
+                className="text-xs font-bold text-pink-400 hover:text-pink-300 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-pink-500/10 border border-pink-500/30 transition-all hover:bg-pink-500/20"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>¿No está tu canción? Escríbela aquí</span>
+              </button>
             </div>
 
             <div className="relative">
@@ -282,7 +365,7 @@ export const ClientView: React.FC<ClientViewProps> = ({
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Busca por nombre de canción o artista (ej: Farruko, Bad Bunny, Karol G)..."
+                placeholder="Busca por nombre o artista (ej: Farruko, Bad Bunny, Karol G, Feid, Blessd)..."
                 className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-slate-900/90 border border-white/10 text-white text-sm focus:border-pink-500 outline-none shadow-inner"
               />
             </div>
@@ -295,112 +378,246 @@ export const ClientView: React.FC<ClientViewProps> = ({
                   <div
                     key={song.id}
                     onClick={() => handleSelectSong(song)}
-                    className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                    role="button"
+                    tabIndex={0}
+                    className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 group active:scale-[0.98] ${
                       isSelected
-                        ? 'bg-gradient-to-r from-purple-900/60 to-pink-900/60 border-pink-500 ring-2 ring-pink-500/40 shadow-lg shadow-pink-500/20'
-                        : 'bg-[#12121e] border-white/10 hover:border-purple-500/40 hover:bg-slate-900/80'
+                        ? 'bg-gradient-to-r from-purple-900/70 to-pink-900/70 border-pink-500 ring-2 ring-pink-500/50 shadow-lg shadow-pink-500/30'
+                        : 'bg-[#12121e] border-white/10 hover:border-pink-500/60 hover:bg-slate-900/90 hover:shadow-md hover:shadow-purple-500/10'
                     }`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <img src={song.albumCover} alt={song.title} className="w-14 h-14 rounded-xl object-cover shadow-md flex-shrink-0" />
+                      <div className="relative flex-shrink-0">
+                        <img
+                          src={song.albumCover}
+                          alt={song.title}
+                          className="w-14 h-14 rounded-xl object-cover shadow-md group-hover:scale-105 transition-transform"
+                        />
+                        {song.previewUrl && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleAudioPreview(song.previewUrl);
+                            }}
+                            title="Escuchar 30s"
+                            className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-pink-600 text-white flex items-center justify-center shadow-lg hover:bg-pink-500 transition-all"
+                          >
+                            {playingPreviewUrl === song.previewUrl ? (
+                              <Pause className="w-3 h-3" />
+                            ) : (
+                              <Play className="w-3 h-3 ml-0.5" />
+                            )}
+                          </button>
+                        )}
+                      </div>
                       <div className="min-w-0">
-                        <h4 className="font-bold text-white text-sm truncate">{song.title}</h4>
+                        <h4 className="font-bold text-white text-sm truncate group-hover:text-pink-300 transition-colors">
+                          {song.title}
+                        </h4>
                         <p className="text-xs text-slate-400 truncate">{song.artist}</p>
                         <span className="text-[10px] text-pink-400 font-semibold">{song.genre}</span>
                       </div>
                     </div>
 
                     <div className="flex-shrink-0">
-                      {isSelected ? (
-                        <div className="w-7 h-7 rounded-full bg-pink-500 text-white flex items-center justify-center shadow-md">
-                          <CheckCircle2 className="w-5 h-5 fill-white text-pink-500" />
-                        </div>
-                      ) : (
-                        <button className="px-3 py-1.5 rounded-xl bg-purple-600/20 text-purple-300 text-xs font-bold hover:bg-purple-600 hover:text-white transition-all">
-                          Elegir
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectSong(song);
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-xs font-black shadow-md shadow-purple-600/30 flex items-center gap-1.5 transition-all group-hover:scale-105"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Pedir 🎵</span>
+                      </button>
                     </div>
                   </div>
                 );
               })}
             </div>
+
+            {/* Bottom button for custom song */}
+            <div className="pt-4 text-center">
+              <button
+                type="button"
+                onClick={handleOpenCustomSong}
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 border border-dashed border-pink-500/50 hover:border-pink-500 text-pink-300 hover:text-white font-bold text-xs transition-all hover:bg-pink-900/20"
+              >
+                <PlusCircle className="w-4 h-4 text-pink-400" />
+                <span>¿No encuentras lo que buscas? Escribe cualquier canción manualmente</span>
+              </button>
+            </div>
+
           </div>
 
-          {/* Form Options when song is selected */}
-          {selectedSong && (
-            <form onSubmit={handleSubmitRequestForm} className="glass-panel-neon p-6 rounded-3xl border border-purple-500/40 space-y-6 animate-fadeIn">
-              
-              <div className="flex items-center gap-3 pb-4 border-b border-white/10">
-                <img src={selectedSong.albumCover} alt={selectedSong.title} className="w-12 h-12 rounded-xl object-cover" />
-                <div>
-                  <span className="text-[10px] font-bold text-pink-400 uppercase tracking-widest block">Canción Seleccionada</span>
-                  <h4 className="font-extrabold text-white text-base">{selectedSong.title}</h4>
-                  <p className="text-xs text-slate-400">{selectedSong.artist}</p>
+          {/* Sticky Quick-Bar if a song was selected and modal closed */}
+          {selectedSong && !isOrderModalOpen && (
+            <div className="sticky bottom-4 z-40 p-4 rounded-2xl bg-gradient-to-r from-purple-900 via-pink-900 to-slate-900 border border-pink-500/60 shadow-2xl flex items-center justify-between gap-4 animate-fadeIn">
+              <div className="flex items-center gap-3 min-w-0">
+                <img src={selectedSong.albumCover} alt={selectedSong.title} className="w-11 h-11 rounded-xl object-cover shadow-md flex-shrink-0" />
+                <div className="min-w-0">
+                  <span className="text-[10px] font-extrabold text-pink-300 uppercase tracking-wider block">Canción Seleccionada</span>
+                  <h4 className="font-bold text-white text-xs truncate">{selectedSong.title}</h4>
+                  <p className="text-[11px] text-slate-300 truncate">{selectedSong.artist}</p>
                 </div>
               </div>
 
-              {/* Step 2: Priority Speed Options */}
-              <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => setIsOrderModalOpen(true)}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-amber-500 hover:brightness-110 text-white font-black text-xs shadow-lg flex items-center gap-2 flex-shrink-0 active:scale-95 transition-all"
+              >
+                <span>Completar Pedido</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+        </div>
+      )}
+
+      {/* 🚀 MODAL INTERACTIVO DE PEDIDO (SE ABRE AL DAR CLIC A CUALQUIER CANCIÓN) */}
+      {isOrderModalOpen && selectedSong && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md overflow-y-auto animate-fadeIn">
+          
+          <div className="relative w-full max-w-lg bg-[#0e0e18] border border-purple-500/50 rounded-3xl p-5 sm:p-7 shadow-2xl space-y-5 my-auto max-h-[92vh] overflow-y-auto text-left">
+            
+            {/* Modal Close Button */}
+            <button
+              type="button"
+              onClick={handleCloseModal}
+              className="absolute top-4 right-4 w-9 h-9 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-all z-10"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Song Header in Modal */}
+            <div className="flex items-center gap-4 pr-10 pb-4 border-b border-white/10">
+              <div className="relative flex-shrink-0">
+                <img
+                  src={selectedSong.albumCover}
+                  alt={selectedSong.title}
+                  className="w-16 h-16 rounded-2xl object-cover shadow-lg border border-white/15"
+                />
+                {selectedSong.previewUrl && (
+                  <button
+                    type="button"
+                    onClick={() => toggleAudioPreview(selectedSong.previewUrl)}
+                    className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-pink-600 text-white flex items-center justify-center shadow-lg hover:bg-pink-500"
+                  >
+                    {playingPreviewUrl === selectedSong.previewUrl ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
+                  </button>
+                )}
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-md bg-pink-500/20 text-pink-300 text-[10px] font-bold uppercase tracking-wider">
+                    {selectedSong.genre || 'Música de Club'}
+                  </span>
+                  {selectedSong.bpm && (
+                    <span className="text-[10px] text-slate-400 font-mono">{selectedSong.bpm} BPM</span>
+                  )}
+                </div>
+                <h3 className="text-lg font-black text-white truncate mt-0.5">{selectedSong.title}</h3>
+                <p className="text-xs text-slate-300 truncate">{selectedSong.artist}</p>
+              </div>
+            </div>
+
+            {/* Custom Song Inputs if manual title */}
+            {selectedSong.id.startsWith('custom-') && (
+              <div className="p-3.5 rounded-2xl bg-purple-950/40 border border-purple-500/30 space-y-3">
+                <span className="text-xs font-bold text-pink-300 block">Personaliza el Título y Artista:</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    required
+                    value={customTitle}
+                    onChange={(e) => setCustomTitle(e.target.value)}
+                    placeholder="Nombre de la canción *"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:border-pink-500 outline-none"
+                  />
+                  <input
+                    type="text"
+                    required
+                    value={customArtist}
+                    onChange={(e) => setCustomArtist(e.target.value)}
+                    placeholder="Artista o Banda *"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:border-pink-500 outline-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmitRequestForm} className="space-y-5">
+              
+              {/* Step 1: Speed & Priority Options */}
+              <div className="space-y-2.5">
                 <label className="text-xs font-extrabold text-slate-200 uppercase tracking-wider block">
-                  2. Elige la Velocidad de Reproducción
+                  1. Velocidad de Reproducción en Cabina
                 </label>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   {INITIAL_PRIORITY_OPTIONS.map((prio) => {
                     const isPrioSelected = selectedPriority.id === prio.id;
                     return (
                       <div
                         key={prio.id}
                         onClick={() => setSelectedPriority(prio)}
-                        className={`p-4 rounded-2xl border transition-all cursor-pointer space-y-2 ${
+                        className={`p-3 rounded-2xl border transition-all cursor-pointer space-y-1.5 ${
                           isPrioSelected
-                            ? 'bg-purple-900/50 border-pink-500 ring-2 ring-pink-500/40 shadow-lg'
+                            ? 'bg-purple-900/60 border-pink-500 ring-2 ring-pink-500/40 shadow-lg shadow-purple-600/20'
                             : 'bg-slate-900/70 border-white/10 hover:border-white/20'
                         }`}
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-extrabold text-white">{prio.badge}</span>
                           <span className="text-xs font-mono font-bold text-emerald-400">
-                            ${prio.priceCOP.toLocaleString('es-CO')} COP
+                            ${prio.priceCOP.toLocaleString('es-CO')}
                           </span>
                         </div>
-                        <p className="text-[11px] text-slate-300">{prio.tagline}</p>
-                        <p className="text-[10px] text-slate-400 font-semibold">⏱ Espera estimada: ~{prio.estimatedWaitMinutes} min</p>
+                        <p className="text-[10px] text-slate-300 leading-tight">{prio.tagline}</p>
+                        <p className="text-[9px] text-slate-400 font-semibold">⏱ Espera: ~{prio.estimatedWaitMinutes} min</p>
                       </div>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Step 3: User Info & Message */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Step 2: User Name & Table Number */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-bold text-slate-300 block mb-1">Tu Nombre o Apodo</label>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">
+                    Tu Nombre o Apodo <span className="text-pink-400">*</span>
+                  </label>
                   <input
                     type="text"
                     required
                     value={userName}
                     onChange={(e) => setUserName(e.target.value)}
                     placeholder="Ej: Carlos / Sofía"
-                    className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:border-pink-500 outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:border-pink-500 outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-slate-300 block mb-1">Número de Mesa o Ubicación</label>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">
+                    Mesa o Ubicación en el Club <span className="text-pink-400">*</span>
+                  </label>
                   <input
                     type="text"
                     required
                     value={tableNumber}
                     onChange={(e) => setTableNumber(e.target.value)}
                     placeholder="Ej: Mesa 12 / Barra Principal"
-                    className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:border-pink-500 outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:border-pink-500 outline-none"
                   />
                 </div>
               </div>
 
-              {/* Dedication Message */}
+              {/* Step 3: Dedication Message */}
               <div>
                 <label className="text-xs font-bold text-slate-300 block mb-1">
                   💬 Mensaje de Dedicatoria (Saldrá en la Pantalla del Club)
@@ -411,17 +628,20 @@ export const ClientView: React.FC<ClientViewProps> = ({
                   value={dedicatedMessage}
                   onChange={(e) => setDedicatedMessage(e.target.value)}
                   placeholder="Ej: ¡Para la mesa 5 con mucho cariño! / ¡Feliz cumpleaños Ana! 🎉"
-                  className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:border-pink-500 outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:border-pink-500 outline-none"
                 />
+                <span className="text-[10px] text-slate-400 text-right block mt-1">
+                  {dedicatedMessage.length}/120 caracteres
+                </span>
               </div>
 
-              {/* Payment Method Selector */}
-              <div className="space-y-3 pt-2">
+              {/* Step 4: Payment Method Selector */}
+              <div className="space-y-2">
                 <label className="text-xs font-extrabold text-slate-200 uppercase tracking-wider block">
-                  3. Método de Pago Automático por QR
+                  3. Método de Pago Directo
                 </label>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2.5">
                   <button
                     type="button"
                     onClick={() => setPaymentMethod('nequi_qr')}
@@ -446,31 +666,36 @@ export const ClientView: React.FC<ClientViewProps> = ({
                     💛 Bancolombia QR
                   </button>
                 </div>
+
+                <div className="p-2.5 rounded-xl bg-slate-950 border border-white/10 text-[11px] text-slate-300 flex items-center justify-between">
+                  <span>Datos de Transferencia:</span>
+                  <span className="font-mono font-bold text-pink-400">
+                    {paymentMethod === 'nequi_qr'
+                      ? `Nequi: ${ownerConfig.nequiPhoneNumber || ownerConfig.nequiPhone || '300 000 0000'}`
+                      : `Bancolombia: ${ownerConfig.bancolombiaAccountNumber || ownerConfig.bancolombiaAcc || 'Ahorros 123-456789-01'}`}
+                  </span>
+                </div>
               </div>
 
               {/* Total Summary & Submit Button */}
-              <div className="p-4 rounded-2xl bg-black/60 border border-purple-500/30 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div>
-                  <span className="text-xs text-slate-400 block">Total a Transferir:</span>
-                  <div className="text-2xl font-black text-white">
-                    <span className="text-gradient-gold">${totalCostCOP.toLocaleString('es-CO')}</span>
-                    <span className="text-xs text-slate-400 font-normal ml-1">COP</span>
-                  </div>
-                </div>
-
+              <div className="pt-2">
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 text-white font-extrabold text-xs shadow-lg shadow-purple-600/40 active:scale-95 transition-all flex items-center justify-center gap-2"
+                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:from-purple-500 hover:to-pink-500 text-white font-black text-sm shadow-xl shadow-purple-600/40 active:scale-95 transition-all flex items-center justify-center gap-2"
                 >
                   <Send className="w-4 h-4" />
-                  <span>Enviar Canción y Pagar</span>
+                  <span>
+                    {isSubmitting
+                      ? 'Enviando a la Cabina...'
+                      : `🚀 Enviar Canción al DJ ($${totalCostCOP.toLocaleString('es-CO')} COP)`}
+                  </span>
                 </button>
               </div>
 
             </form>
-          )}
 
+          </div>
         </div>
       )}
 
@@ -479,7 +704,7 @@ export const ClientView: React.FC<ClientViewProps> = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-extrabold text-slate-200 uppercase tracking-wider">
-              Historial de mis Canciones Programadas
+              Historial de mis Canciones Solicitadas
             </h3>
             <span className="text-xs font-mono font-bold text-purple-400">ID Dispositivo: {deviceId.substring(0, 14)}...</span>
           </div>
@@ -489,8 +714,14 @@ export const ClientView: React.FC<ClientViewProps> = ({
               <Music className="w-12 h-12 mx-auto text-purple-400 opacity-40 animate-bounce" />
               <h4 className="text-base font-bold text-white">Aún no has pedido canciones</h4>
               <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                Tus canciones solicitadas y sus dedicatorias quedarán guardadas aquí en tu historial.
+                Tus canciones solicitadas y sus dedicatorias quedarán guardadas aquí en tu historial en tiempo real.
               </p>
+              <button
+                onClick={() => setActiveSubTab('request')}
+                className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-all"
+              >
+                🎵 Pedir mi Primera Canción
+              </button>
             </div>
           ) : (
             <div className="space-y-3">
