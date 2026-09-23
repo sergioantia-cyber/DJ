@@ -43,6 +43,7 @@ export const INITIAL_SONGS: Song[] = [
     bpm: 128,
     duration: '4:47',
     energyLevel: 10,
+    previewUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/71/f4/06/71f40693-8198-bda7-15fa-cef96b897f74/mzaf_10196410050022616641.plus.aac.p.m4a',
   },
   {
     id: 'song-2',
@@ -53,6 +54,7 @@ export const INITIAL_SONGS: Song[] = [
     bpm: 112,
     duration: '4:27',
     energyLevel: 9,
+    previewUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/93/f7/49/93f74959-31cf-822f-5a12-ab40bd1f73be/mzaf_16943526665607661808.plus.aac.p.m4a',
   },
   {
     id: 'song-3',
@@ -63,6 +65,7 @@ export const INITIAL_SONGS: Song[] = [
     bpm: 95,
     duration: '2:52',
     energyLevel: 8,
+    previewUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/89/19/a2/8919a2a9-8296-1d4e-c473-8e1a1bf09103/mzaf_3896003535913058051.plus.aac.p.m4a',
   },
   {
     id: 'song-4',
@@ -73,6 +76,7 @@ export const INITIAL_SONGS: Song[] = [
     bpm: 96,
     duration: '3:54',
     energyLevel: 9,
+    previewUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/69/6f/10/696f10d4-04eb-0d59-2fa7-91b0b915065e/mzaf_4870463956684181967.plus.aac.p.m4a',
   },
 ];
 

@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { SongRequest, RequestStatus, VirtualDJConfig, OwnerConfig } from '../types';
 import { soundFx } from '../services/soundEffects';
+import { clubAudioPlayer, ClubAudioState } from '../services/clubAudioPlayer';
 
 interface DJBoothViewProps {
   requests: SongRequest[];
@@ -52,12 +53,14 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [rejectionModalReqId, setRejectionModalReqId] = useState<string | null>(null);
 
-  // Standalone Sound System Player State
+  // Standalone Sound System Player State & Global Audio Subscription
   const [soundSystemMode, setSoundSystemMode] = useState<'virtualdj' | 'web_player' | 'spotify'>('web_player');
-  const [isPlayingWebAudio, setIsPlayingWebAudio] = useState<boolean>(false);
+  const [audioState, setAudioState] = useState<ClubAudioState>(() => clubAudioPlayer.getState());
   const [currentPlayingReq, setCurrentPlayingReq] = useState<SongRequest | null>(null);
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => {
+    return clubAudioPlayer.subscribe(setAudioState);
+  }, []);
 
   const pendingRequests = requests.filter((r) => r.status === 'pending');
   const validRequests = requests.filter((r) => r.status !== 'rejected');
@@ -77,39 +80,14 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
   const handlePlaySongStandalone = (req: SongRequest) => {
     setCurrentPlayingReq(req);
     onUpdateRequestStatus(req.id, 'playing');
-
-    if (audioRef.current) {
-      audioRef.current.pause();
-    }
-
-    if (req.song?.previewUrl) {
-      const audio = new Audio(req.song.previewUrl);
-      audioRef.current = audio;
-      audio.play();
-      setIsPlayingWebAudio(true);
-
-      audio.onended = () => {
-        setIsPlayingWebAudio(false);
-        onDeleteRequest(req.id); // Delete completed song cleanly from queue
-        const next = requests.find((r) => (r.status === 'accepted' || r.status === 'pending') && r.id !== req.id);
-        if (next) {
-          handlePlaySongStandalone(next);
-        }
-      };
-    } else {
-      soundFx.playBassDrop();
-      setIsPlayingWebAudio(true);
-    }
+    clubAudioPlayer.playSong(req.song, req);
   };
 
   const handleTogglePauseWebAudio = () => {
-    if (!audioRef.current) return;
-    if (isPlayingWebAudio) {
-      audioRef.current.pause();
-      setIsPlayingWebAudio(false);
+    if (audioState.isPlaying) {
+      clubAudioPlayer.pause();
     } else {
-      audioRef.current.play();
-      setIsPlayingWebAudio(true);
+      clubAudioPlayer.resume();
     }
   };
 
@@ -206,29 +184,51 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
           <div className="p-4 rounded-2xl bg-black/60 border border-purple-500/30 flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-12 h-12 rounded-xl bg-purple-900/60 border border-purple-500/40 flex items-center justify-center flex-shrink-0">
-                <Disc3 className={`w-7 h-7 text-pink-400 ${isPlayingWebAudio ? 'animate-spin' : ''}`} />
+                <Disc3 className={`w-7 h-7 text-pink-400 ${audioState.isPlaying && !audioState.isMuted ? 'animate-spin' : ''}`} />
               </div>
               <div className="min-w-0">
                 <span className="text-[10px] font-bold text-pink-400 uppercase tracking-widest block">
                   Reproductor Directo a Altavoces / Bluetooth
                 </span>
                 <h4 className="font-extrabold text-white text-sm truncate">
-                  {currentPlayingReq ? currentPlayingReq.song?.title : 'Esperando primera canción...'}
+                  {audioState.currentSong ? audioState.currentSong.title : 'Esperando primera canción...'}
                 </h4>
                 <p className="text-xs text-slate-400 truncate">
-                  {currentPlayingReq ? `${currentPlayingReq.song?.artist} • Pedido por ${currentPlayingReq.userName}` : 'Conecta este teléfono/tablet al AUX o Bluetooth del club'}
+                  {audioState.currentSong ? `${audioState.currentSong.artist} • ${audioState.isMuted ? 'Audio Silenciado por Defecto' : 'Sonando en Vivo'}` : 'Conecta este teléfono/tablet al AUX o Bluetooth del club'}
                 </p>
               </div>
             </div>
 
-            {/* Playback controls */}
-            <div className="flex items-center gap-3 flex-shrink-0">
+            {/* Playback & Mute Controls */}
+            <div className="flex items-center gap-2.5 flex-shrink-0 flex-wrap">
+              {/* Mute / Unmute Button */}
+              {audioState.isMuted ? (
+                <button
+                  type="button"
+                  onClick={() => clubAudioPlayer.unmuteAndPlay()}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-amber-500 hover:brightness-110 text-white font-black text-xs shadow-lg shadow-pink-500/30 flex items-center gap-1.5 active:scale-95 animate-pulse"
+                >
+                  <Volume2 className="w-4 h-4 animate-bounce" />
+                  <span>🔊 Activar Sonido</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => clubAudioPlayer.mute()}
+                  className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-white/10 font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all"
+                >
+                  <VolumeX className="w-4 h-4 text-rose-400" />
+                  <span>🔇 Silenciar</span>
+                </button>
+              )}
+
+              {/* Play / Pause Button */}
               <button
-                disabled={!currentPlayingReq}
+                disabled={!audioState.currentSong}
                 onClick={handleTogglePauseWebAudio}
-                className="w-11 h-11 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 text-white flex items-center justify-center shadow-lg shadow-purple-600/40 active:scale-95 disabled:opacity-40"
+                className="w-10 h-10 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white flex items-center justify-center shadow-lg shadow-purple-600/40 active:scale-95 disabled:opacity-40"
               >
-                {isPlayingWebAudio ? <Pause className="w-5 h-5 fill-white" /> : <Play className="w-5 h-5 fill-white ml-0.5" />}
+                {audioState.isPlaying ? <Pause className="w-5 h-5 fill-white" /> : <Play className="w-5 h-5 fill-white ml-0.5" />}
               </button>
             </div>
           </div>

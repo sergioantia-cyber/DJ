@@ -8,6 +8,7 @@ import { VirtualDJBridgeView } from './components/VirtualDJBridgeView';
 import { TermsAndConditionsModal } from './components/TermsAndConditionsModal';
 import { DownloadableQRModal } from './components/DownloadableQRModal';
 import { BottomQuickBar } from './components/BottomQuickBar';
+import { ClubSoundBar } from './components/ClubSoundBar';
 import { Lock, ShieldCheck, KeyRound, X } from 'lucide-react';
 
 import { INITIAL_SONGS, INITIAL_REQUESTS, DEFAULT_OWNER_CONFIG } from './data/mockDatabase';
@@ -312,6 +313,9 @@ export function App() {
         onOpenQRModal={() => setIsQRModalOpen(true)}
         onExitDJMode={handleExitDJMode}
       />
+
+      {/* Global Club Sound Notification & Mute/Unmute Bar */}
+      <ClubSoundBar />
 
       {/* Main Content View */}
       <main className="flex-1 pb-24">

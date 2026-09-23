@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Disc3, QrCode, Sparkles, MessageSquare, Volume2, VolumeX, Radio, Zap, Play, Pause, Download } from 'lucide-react';
 import QRCode from 'qrcode';
 import { SongRequest, OwnerConfig } from '../types';
+import { clubAudioPlayer, ClubAudioState } from '../services/clubAudioPlayer';
 
 interface StageScreenViewProps {
   requests: SongRequest[];
@@ -23,11 +24,18 @@ export const StageScreenView: React.FC<StageScreenViewProps> = ({ requests, owne
     (r) => r.id !== currentSongReq?.id && r.status !== 'completed'
   );
 
-  const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [audioState, setAudioState] = useState<ClubAudioState>(() => clubAudioPlayer.getState());
   const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const targetAppUrl = ownerConfig?.apkDownloadUrl?.trim() || (typeof window !== 'undefined' ? window.location.origin : 'https://dj-phi-ruby.vercel.app');
+
+  // Subscribe to global club audio player state
+  useEffect(() => {
+    const unsubscribe = clubAudioPlayer.subscribe((newState) => {
+      setAudioState({ ...newState });
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Render high-contrast scannable QR on Stage Screen
   useEffect(() => {
@@ -51,50 +59,11 @@ export const StageScreenView: React.FC<StageScreenViewProps> = ({ requests, owne
     }
   }, [targetAppUrl]);
 
-  // Auto-play audio whenever the active song changes
+  // When active song changes, trigger audio through clubAudioPlayer
   useEffect(() => {
     if (!currentSongReq || !currentSongReq.song) return;
-
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
-
-    if (currentSongReq.song.previewUrl) {
-      const audio = new Audio(currentSongReq.song.previewUrl);
-      audioRef.current = audio;
-      audio.play().then(() => {
-        setIsPlayingAudio(true);
-      }).catch((e) => {
-        console.log('Audio autoplay requires user interaction:', e);
-        setIsPlayingAudio(false);
-      });
-
-      audio.onended = () => {
-        setIsPlayingAudio(false);
-      };
-    }
+    clubAudioPlayer.playSong(currentSongReq.song, currentSongReq);
   }, [currentSongReq?.id]);
-
-  const handleToggleStageAudio = () => {
-    if (!audioRef.current && currentSongReq?.song.previewUrl) {
-      const audio = new Audio(currentSongReq.song.previewUrl);
-      audioRef.current = audio;
-      audio.play();
-      setIsPlayingAudio(true);
-      return;
-    }
-
-    if (audioRef.current) {
-      if (isPlayingAudio) {
-        audioRef.current.pause();
-        setIsPlayingAudio(false);
-      } else {
-        audioRef.current.play();
-        setIsPlayingAudio(true);
-      }
-    }
-  };
 
   return (
     <div className="min-h-[88vh] bg-club-gradient rounded-3xl p-6 sm:p-10 border border-purple-500/30 flex flex-col justify-between relative overflow-hidden shadow-2xl">
@@ -104,30 +73,29 @@ export const StageScreenView: React.FC<StageScreenViewProps> = ({ requests, owne
       <div className="absolute bottom-10 right-10 w-96 h-96 bg-pink-600/20 rounded-full blur-3xl pointer-events-none animate-pulse"></div>
 
       {/* Top Header: Club Name & Live Indicator & Stage Audio Toggle */}
-      <div className="flex items-center justify-between z-10">
+      <div className="flex items-center justify-between z-10 flex-wrap gap-4">
         <div className="flex items-center gap-3">
           <div className="w-4 h-4 rounded-full bg-pink-500 animate-ping"></div>
           <h2 className="text-2xl sm:text-4xl font-black text-white tracking-widest uppercase">
-            CLUB IBIZA <span className="text-gradient-neon">• EN VIVO</span>
+            {ownerConfig?.clubName || 'CLUB IBIZA'} <span className="text-gradient-neon">• EN VIVO</span>
           </h2>
         </div>
 
-        {/* Audio Toggle Button for Stage Screen */}
-        {currentSongReq?.song.previewUrl && (
-          <button
-            onClick={handleToggleStageAudio}
-            className={`flex items-center gap-2 px-4 py-2 rounded-2xl border backdrop-blur-md transition-all ${
-              isPlayingAudio
-                ? 'bg-pink-600/80 border-pink-400 text-white shadow-lg shadow-pink-600/40'
-                : 'bg-black/60 border-purple-500/40 text-pink-300 hover:text-white'
-            }`}
-          >
-            {isPlayingAudio ? <Volume2 className="w-5 h-5 animate-bounce" /> : <VolumeX className="w-5 h-5" />}
-            <span className="text-xs font-black tracking-wider uppercase">
-              {isPlayingAudio ? 'SONIDO EN VIVO ACTIVO' : 'ACTIVAR SONIDO PANTALLA'}
-            </span>
-          </button>
-        )}
+        {/* Audio Toggle Button for Stage Screen (Silenciar / Activar Sonido) */}
+        <button
+          type="button"
+          onClick={() => clubAudioPlayer.toggleMute()}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl border backdrop-blur-md transition-all active:scale-95 shadow-lg ${
+            !audioState.isMuted
+              ? 'bg-pink-600/80 border-pink-400 text-white shadow-pink-600/40'
+              : 'bg-gradient-to-r from-pink-600 via-rose-600 to-amber-500 text-white border-white/20 animate-pulse'
+          }`}
+        >
+          {!audioState.isMuted ? <VolumeX className="w-5 h-5 text-rose-200" /> : <Volume2 className="w-5 h-5 animate-bounce" />}
+          <span className="text-xs font-black tracking-wider uppercase">
+            {!audioState.isMuted ? '🔇 SILENCIAR MÚSICA' : '🔊 ACTIVAR SONIDO PARA ESCUCHAR'}
+          </span>
+        </button>
       </div>
 
       {/* Center Stage: Now Playing Showcase */}
@@ -166,6 +134,24 @@ export const StageScreenView: React.FC<StageScreenViewProps> = ({ requests, owne
                 {currentSongReq.song.artist}
               </p>
             </div>
+
+            {/* Prompt de Sonido Silenciado si el usuario aún no activó el audio */}
+            {audioState.isMuted && (
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-pink-950/70 via-purple-950/70 to-slate-950/80 border border-pink-500/50 flex flex-col sm:flex-row items-center justify-between gap-3 animate-pulse shadow-xl">
+                <div className="flex items-center gap-2 text-xs font-bold text-pink-200 text-left">
+                  <Volume2 className="w-5 h-5 text-amber-400 animate-bounce flex-shrink-0" />
+                  <span>La música está sonando pero el audio está silenciado por defecto.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => clubAudioPlayer.unmuteAndPlay()}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-amber-500 hover:brightness-110 text-white font-black text-xs shadow-lg flex items-center justify-center gap-2 flex-shrink-0 active:scale-95 transition-all"
+                >
+                  <Volume2 className="w-4 h-4" />
+                  <span>🔊 Activar Sonido para Escuchar</span>
+                </button>
+              </div>
+            )}
 
             {/* Dedicated Message Neon Banner */}
             {currentSongReq.dedicatedMessage ? (
@@ -221,35 +207,32 @@ export const StageScreenView: React.FC<StageScreenViewProps> = ({ requests, owne
               <p className="text-xs text-slate-400 truncate">{nextSongReq.song.artist} • Pedido por {nextSongReq.userName}</p>
             </div>
           ) : (
-            <div className="text-xs text-slate-400 italic">
-              Sé el primero en pedir la siguiente canción escaneando el código QR 📱
-            </div>
+            <p className="text-xs text-slate-400 italic">No hay más canciones en cola en este momento.</p>
           )}
         </div>
 
-        {/* Scan QR Code Banner with Real Canvas & Click-to-Download */}
-        <div
-          onClick={onOpenQRModal}
-          className="md:col-span-5 glass-panel-neon rounded-2xl p-4 border border-pink-500/40 flex items-center justify-between gap-4 cursor-pointer hover:border-pink-400/80 transition-all group select-none shadow-lg"
-        >
-          <div>
-            <span className="text-[10px] font-black text-pink-400 uppercase tracking-widest block flex items-center gap-1.5">
-              <span>¿Quieres pedir tu canción?</span>
-              <Sparkles className="w-3 h-3 text-amber-400 animate-pulse" />
-            </span>
-            <h4 className="text-sm font-extrabold text-white group-hover:text-pink-300 transition-colors">
-              Escanea para pedir al DJ
-            </h4>
-            <p className="text-[11px] text-slate-300 mt-0.5">Paga fácil con Nequi o Bancolombia</p>
-            {onOpenQRModal && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-pink-400 group-hover:underline mt-1">
-                <Download className="w-3 h-3" /> Clic para descargar o ver QR grande
-              </span>
-            )}
+        {/* Scan to Request QR Box */}
+        <div className="md:col-span-5 glass-panel rounded-2xl p-3 border border-pink-500/30 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-1.5 rounded-xl bg-white flex-shrink-0 shadow-md">
+              <canvas ref={qrCanvasRef} className="w-16 h-16 rounded" />
+            </div>
+            <div>
+              <span className="text-[10px] font-black text-pink-400 uppercase tracking-wider block">¿Quieres tu canción?</span>
+              <h4 className="text-xs font-bold text-white">Escanea para pedir y dedicar</h4>
+              <p className="text-[9px] text-slate-400">Abre la cámara de tu celular</p>
+            </div>
           </div>
-          <div className="bg-white rounded-xl p-1 flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-105 transition-transform">
-            <canvas ref={qrCanvasRef} className="rounded-lg w-[76px] h-[76px]" />
-          </div>
+
+          {onOpenQRModal && (
+            <button
+              onClick={onOpenQRModal}
+              title="Descargar afiche para imprimir"
+              className="p-2.5 rounded-xl bg-pink-500/20 hover:bg-pink-500/30 text-pink-300 hover:text-white border border-pink-500/40 transition-all flex-shrink-0"
+            >
+              <QrCode className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
       </div>
