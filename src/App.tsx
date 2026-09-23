@@ -7,6 +7,7 @@ import { StageScreenView } from './components/StageScreenView';
 import { VirtualDJBridgeView } from './components/VirtualDJBridgeView';
 import { TermsAndConditionsModal } from './components/TermsAndConditionsModal';
 import { DownloadableQRModal } from './components/DownloadableQRModal';
+import { BottomQuickBar } from './components/BottomQuickBar';
 import { Lock, ShieldCheck, KeyRound, X } from 'lucide-react';
 
 import { INITIAL_SONGS, INITIAL_REQUESTS, DEFAULT_OWNER_CONFIG } from './data/mockDatabase';
@@ -190,6 +191,18 @@ export function App() {
     }
   };
 
+  const handleExitDJMode = () => {
+    try {
+      soundFx.playScratch();
+    } catch (e) {}
+    setActiveTab('client');
+    setIsStealthAdminUnlocked(false);
+    setUnlockedRole(null);
+    localStorage.removeItem('beatpulse_stealth_unlocked');
+    localStorage.removeItem('beatpulse_unlocked_role');
+    localStorage.setItem('beatpulse_active_tab', 'client');
+  };
+
   const handleAcceptTerms = () => {
     setOwnerConfig((prev) => ({
       ...prev,
@@ -297,10 +310,11 @@ export function App() {
         unlockedRole={unlockedRole}
         onSecretLogoTap={handleSecretLogoTap}
         onOpenQRModal={() => setIsQRModalOpen(true)}
+        onExitDJMode={handleExitDJMode}
       />
 
       {/* Main Content View */}
-      <main className="flex-1 pb-16">
+      <main className="flex-1 pb-24">
         {activeTab === 'client' && (
           <ClientView
             songs={songs}
@@ -320,6 +334,7 @@ export function App() {
             onDeleteRequest={handleDeleteRequest}
             onToggleAutoAccept={handleToggleAutoAccept}
             onOpenQRModal={() => setIsQRModalOpen(true)}
+            onExitDJMode={handleExitDJMode}
           />
         )}
 
@@ -405,6 +420,16 @@ export function App() {
         onClose={() => setIsQRModalOpen(false)}
         ownerConfig={ownerConfig}
         onUpdateOwnerConfig={handleUpdateOwnerConfig}
+      />
+
+      {/* Barra de Acceso Rápido Inferior (Inicio, Pantalla Club, Cabina DJ, Salir DJ) */}
+      <BottomQuickBar
+        activeTab={activeTab}
+        onSelectTab={handleTabSwitchRequest}
+        isStealthAdminUnlocked={isStealthAdminUnlocked}
+        unlockedRole={unlockedRole}
+        pendingCount={pendingCount}
+        onExitDJMode={handleExitDJMode}
       />
 
     </div>

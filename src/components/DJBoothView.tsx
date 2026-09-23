@@ -22,7 +22,8 @@ import {
   RefreshCw,
   Trash2,
   QrCode,
-  Printer
+  Printer,
+  LogOut
 } from 'lucide-react';
 import { SongRequest, RequestStatus, VirtualDJConfig, OwnerConfig } from '../types';
 import { soundFx } from '../services/soundEffects';
@@ -35,6 +36,7 @@ interface DJBoothViewProps {
   onDeleteRequest: (requestId: string) => void;
   onToggleAutoAccept: () => void;
   onOpenQRModal?: () => void;
+  onExitDJMode?: () => void;
 }
 
 export const DJBoothView: React.FC<DJBoothViewProps> = ({
@@ -45,6 +47,7 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
   onDeleteRequest,
   onToggleAutoAccept,
   onOpenQRModal,
+  onExitDJMode,
 }) => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [rejectionModalReqId, setRejectionModalReqId] = useState<string | null>(null);
@@ -144,43 +147,57 @@ export const DJBoothView: React.FC<DJBoothViewProps> = ({
             </div>
           </div>
 
-          {/* Mode Selector Tabs */}
-          <div className="flex items-center bg-black/50 p-1.5 rounded-2xl border border-white/10 overflow-x-auto">
-            <button
-              onClick={() => setSoundSystemMode('web_player')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                soundSystemMode === 'web_player'
-                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Smartphone className="w-3.5 h-3.5" />
-              <span>📱 Móvil / Bluetooth (Web Player)</span>
-            </button>
+          {/* Mode Selector Tabs & Exit Button */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center bg-black/50 p-1.5 rounded-2xl border border-white/10 overflow-x-auto">
+              <button
+                onClick={() => setSoundSystemMode('web_player')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                  soundSystemMode === 'web_player'
+                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>📱 Móvil / Bluetooth</span>
+              </button>
 
-            <button
-              onClick={() => setSoundSystemMode('virtualdj')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                soundSystemMode === 'virtualdj'
-                  ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Cable className="w-3.5 h-3.5" />
-              <span>💻 Laptop VirtualDJ</span>
-            </button>
+              <button
+                onClick={() => setSoundSystemMode('virtualdj')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                  soundSystemMode === 'virtualdj'
+                    ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Cable className="w-3.5 h-3.5" />
+                <span>💻 Laptop VirtualDJ</span>
+              </button>
 
-            <button
-              onClick={() => setSoundSystemMode('spotify')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                soundSystemMode === 'spotify'
-                  ? 'bg-emerald-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span>🎧 Enlace Spotify</span>
-            </button>
+              <button
+                onClick={() => setSoundSystemMode('spotify')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                  soundSystemMode === 'spotify'
+                    ? 'bg-emerald-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>🎧 Spotify</span>
+              </button>
+            </div>
+
+            {onExitDJMode && (
+              <button
+                type="button"
+                onClick={onExitDJMode}
+                className="px-3.5 py-2 rounded-2xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 active:scale-95 shadow-md shadow-rose-900/20"
+                title="Salir del Modo DJ y volver al inicio"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>🚪 Salir de Cabina DJ</span>
+              </button>
+            )}
           </div>
         </div>
 
